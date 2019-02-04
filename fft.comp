@@ -1,0 +1,56 @@
+#version 450
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(binding = 0) uniform UBO {
+    uint strideX;
+    uint strideY;
+    uint strideZ;
+    uint radixStride;
+    uint stageSize;
+    float angleFactor;
+    float normalizationFactor;
+} ubo;
+
+layout(binding = 1) readonly buffer DataIn {
+    vec2 values[];
+} dataIn;
+
+layout(binding = 2) writeonly buffer DataOut {
+    vec2 values[];
+} dataOut;
+
+uint indexInBuffer(uint index) {
+    return index * ubo.strideX + gl_GlobalInvocationID.y * ubo.strideY + gl_GlobalInvocationID.z * ubo.strideZ;
+}
+
+
+
+void butterfly(inout vec2 a, inout vec2 b, vec2 w) {
+    vec2 t = mat2(b.x, b.y, -b.y, b.x) * w;
+    b = a - t;
+    a = a + t;
+}
+
+vec2 twiddle(uint k) {
+    float angle = float(k) * ubo.angleFactor;
+    return vec2(cos(angle), sin(angle));
+}
+
+
+
+void main() {
+    const uint radix = 2u;
+    uint invocationInBlock = gl_GlobalInvocationID.x & (ubo.stageSize - 1u);
+    uint blockBeginInvocation = gl_GlobalInvocationID.x - invocationInBlock;
+    uint outputIndex = invocationInBlock + blockBeginInvocation * radix;
+
+    vec2 values[radix];
+    for(uint i = 0; i < radix; ++i)
+        values[i] = dataIn.values[indexInBuffer(gl_GlobalInvocationID.x + i * ubo.radixStride)];
+
+    butterfly(values[0], values[1], twiddle(invocationInBlock));
+
+    for(uint i = 0; i < radix; ++i)
+        dataOut.values[indexInBuffer(outputIndex + i * ubo.stageSize)] = values[i] * ubo.normalizationFactor;
+}
