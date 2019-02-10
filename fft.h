@@ -167,11 +167,18 @@ typedef struct {
 void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
     VulkanFFTAxis* vulkanFFTAxis = &vulkanFFTPlan->axes[axis];
 
-    vulkanFFTAxis->stageCount = __builtin_ctz(vulkanFFTAxis->sampleCount); // Logarithm of base 2
-    assert(1 << vulkanFFTAxis->stageCount == vulkanFFTAxis->sampleCount); // Check POT
-    vulkanFFTAxis->stageRadix = (uint32_t*)malloc(sizeof(uint32_t) * vulkanFFTAxis->stageCount);
-    for(uint32_t j = 0; j < vulkanFFTAxis->stageCount; ++j)
-        vulkanFFTAxis->stageRadix[j] = 2;
+    {
+        vulkanFFTAxis->stageCount = __builtin_ctz(vulkanFFTAxis->sampleCount); // Logarithm of base 2
+        vulkanFFTAxis->stageRadix = (uint32_t*)malloc(sizeof(uint32_t) * vulkanFFTAxis->stageCount);
+        uint32_t stageSize = vulkanFFTAxis->sampleCount;
+        vulkanFFTAxis->stageCount = 0;
+        while(stageSize > 1) {
+            vulkanFFTAxis->stageRadix[vulkanFFTAxis->stageCount] = 2;
+            assert(stageSize % vulkanFFTAxis->stageRadix[vulkanFFTAxis->stageCount] == 0);
+            stageSize /= vulkanFFTAxis->stageRadix[vulkanFFTAxis->stageCount];
+            ++vulkanFFTAxis->stageCount;
+        }
+    }
 
     {
         vulkanFFTAxis->uboSize = sizeof(UBO) * vulkanFFTAxis->stageCount;
@@ -183,14 +190,16 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
         UBO* ubo = createVulkanFFTUpload(&vulkanFFTTransfer);
         const uint32_t remap[3][3] = {{0, 1, 2}, {1, 2, 0}, {2, 0, 1}};
         uint32_t strides[3] = {1, vulkanFFTPlan->axes[0].sampleCount, vulkanFFTPlan->axes[0].sampleCount * vulkanFFTPlan->axes[1].sampleCount};
+        uint32_t stageSize = 1;
         for(uint32_t j = 0; j < vulkanFFTAxis->stageCount; ++j) {
             ubo[j].strideX = strides[remap[axis][0]];
             ubo[j].strideY = strides[remap[axis][1]];
             ubo[j].strideZ = strides[remap[axis][2]];
             ubo[j].radixStride = vulkanFFTAxis->sampleCount / vulkanFFTAxis->stageRadix[j];
-            ubo[j].stageSize = 1 << j;
+            ubo[j].stageSize = stageSize;
             ubo[j].angleFactor = ((vulkanFFTPlan->inverse) ? -1.0 : 1.0) * M_PI / (float)ubo[j].stageSize;
             ubo[j].normalizationFactor = (vulkanFFTPlan->inverse) ? 1.0 : 1.0 / vulkanFFTAxis->stageRadix[j];
+            stageSize *= vulkanFFTAxis->stageRadix[j];
         }
         freeVulkanFFTTransfer(&vulkanFFTTransfer);
     }
@@ -286,7 +295,7 @@ void createVulkanFFT(VulkanFFTPlan* vulkanFFTPlan) {
         createBuffer(vulkanFFTPlan->context, &vulkanFFTPlan->buffer[i], &vulkanFFTPlan->deviceMemory[i], VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_HEAP_DEVICE_LOCAL_BIT, vulkanFFTPlan->bufferSize);
     for(uint32_t i = 0; i < COUNT_OF(vulkanFFTPlan->axes); ++i)
         if(vulkanFFTPlan->axes[i].sampleCount > 1)
-            planVulkanFFTAxis(vulkanFFT, i);
+            planVulkanFFTAxis(vulkanFFTPlan, i);
 }
 
 void recordVulkanFFT(VulkanFFTPlan* vulkanFFTPlan, VkCommandBuffer commandBuffer) {
