@@ -135,6 +135,7 @@ typedef union {
     struct {
         uint32_t strideX, strideY, strideZ;
         uint32_t radixStride, stageSize;
+        float directionFactor;
         float angleFactor;
         float normalizationFactor;
     };
@@ -197,7 +198,8 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
             ubo[j].strideZ = strides[remap[axis][2]];
             ubo[j].radixStride = vulkanFFTAxis->sampleCount / vulkanFFTAxis->stageRadix[j];
             ubo[j].stageSize = stageSize;
-            ubo[j].angleFactor = ((vulkanFFTPlan->inverse) ? -1.0 : 1.0) * M_PI / (float)ubo[j].stageSize;
+            ubo[j].directionFactor = (vulkanFFTPlan->inverse) ? -1.0 : 1.0;
+            ubo[j].angleFactor = ubo[j].directionFactor * M_PI / (float)ubo[j].stageSize;
             ubo[j].normalizationFactor = (vulkanFFTPlan->inverse) ? 1.0 : 1.0 / vulkanFFTAxis->stageRadix[j];
             stageSize *= vulkanFFTAxis->stageRadix[j];
         }

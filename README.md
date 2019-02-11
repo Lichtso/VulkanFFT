@@ -1,8 +1,19 @@
 # Vulkan Fast Fourier Transform
-This libary can calculate a multidimensional [Discrete Fourier Transform](https://en.wikipedia.org/wiki/Discrete_Fourier_transform) in O(n * log(n)) on the GPU using the [Vulkan API](https://www.khronos.org/vulkan/).
-
+This library can calculate a multidimensional [Discrete Fourier Transform](https://en.wikipedia.org/wiki/Discrete_Fourier_transform) on the GPU using the [Vulkan API](https://www.khronos.org/vulkan/).
+However, in most cases you probably want a different library,
+because Vulkan does not change much about the GPU computations,
+but is a lot more complex than other APIs.
+Alternatives are based on [OpenGL](https://github.com/Themaister/GLFFT) or [CUDA](https://developer.nvidia.com/cufft) for example.
+Some reasons to use this library anyway are:
+- You already have a Vulkan application and just need a FFT implementation
+- You want to safe CPU time, because Vulkan is meant do exactly that
+- You are on a platform where other options are worse or just not supported (e.g. OpenGL on MacOS)
+- You are just here for the CLI and don't care about Vulkan
 
 ## Command Line Interface
+Note that many small invocations are very inefficient, because the startup costs of Vulkan are very high.
+So the CLI is only useful for transforming big data sets and testing.
+
 Don't forget to set the environment variables to something like this:
 ```bash
 VULKAN_SDK=path/to/vulkan/installation
@@ -18,7 +29,7 @@ export VK_LAYER_PATH=$VULKAN_SDK/etc/vulkan/explicit_layer.d
 - `--input raw / ascii / png` Input encoding
 - `--output raw / ascii / png` Output encoding
 - `--device index` Vulkan device to use
-- `--list-devices` List vulkan devices
+- `--list-devices` List Vulkan devices
 
 ### Example Invocations
 ```bash

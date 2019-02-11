@@ -1,4 +1,7 @@
 #version 450
+#define PPCAT_NX(A, B) A ## B
+#define PPCAT(A, B) PPCAT_NX(A, B)
+#define M_SQRT1_2 0.707106781186547524401
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
@@ -8,6 +11,7 @@ layout(binding = 0) uniform UBO {
     uint strideZ;
     uint radixStride;
     uint stageSize;
+    float directionFactor;
     float angleFactor;
     float normalizationFactor;
 } ubo;
@@ -26,31 +30,84 @@ uint indexInBuffer(uint index) {
 
 
 
+void swapComplexNumbers(inout vec2 a, inout vec2 b) {
+    vec2 aux = b;
+    b = a;
+    a = aux;
+}
+
+vec2 multComplexNumbers(vec2 a, vec2 b) {
+    return mat2(a.x, a.y, -a.y, a.x) * b;
+}
+
+vec2 perpendicularComplexNumber(vec2 w) {
+    return vec2(-w.y, w.x) * ubo.directionFactor;
+}
+
+vec2 angleBisectComplexNumber(vec2 w, float k) {
+    return normalize((w + vec2(1.0, 0.0)) * k);
+}
+
 void butterfly(inout vec2 a, inout vec2 b, vec2 w) {
-    vec2 t = mat2(b.x, b.y, -b.y, b.x) * w;
+    vec2 t = multComplexNumbers(b, w);
     b = a - t;
     a = a + t;
 }
 
-vec2 twiddle(uint k) {
-    float angle = float(k) * ubo.angleFactor;
-    return vec2(cos(angle), sin(angle));
+
+
+void radix2(inout vec2 values[2], vec2 w) {
+    butterfly(values[0], values[1], w);
+}
+
+void radix4(inout vec2 values[4], vec2 w) {
+    butterfly(values[0], values[2], w);
+    butterfly(values[1], values[3], w);
+    vec2 w0 = angleBisectComplexNumber(w, 0.5);
+    vec2 w1 = perpendicularComplexNumber(w0);
+    butterfly(values[0], values[1], w0);
+    butterfly(values[2], values[3], w1);
+    swapComplexNumbers(values[1], values[2]);
+}
+
+void radix8(inout vec2 values[8], vec2 w) {
+    butterfly(values[0], values[4], w);
+    butterfly(values[1], values[5], w);
+    butterfly(values[2], values[6], w);
+    butterfly(values[3], values[7], w);
+    vec2 w0 = angleBisectComplexNumber(w, 0.5);
+    vec2 w1 = perpendicularComplexNumber(w);
+    butterfly(values[0], values[2], w0);
+    butterfly(values[1], values[3], w0);
+    butterfly(values[4], values[6], w1);
+    butterfly(values[5], values[7], w1);
+    vec2 W0 = angleBisectComplexNumber(w, 0.25);
+    vec2 W1 = perpendicularComplexNumber(W0);
+    vec2 W2 = multComplexNumbers(W0, vec2(M_SQRT1_2, M_SQRT1_2 * ubo.directionFactor));
+    vec2 W3 = perpendicularComplexNumber(W2);
+    butterfly(values[0], values[1], W0);
+    butterfly(values[2], values[3], W1);
+    butterfly(values[4], values[5], W2);
+    butterfly(values[6], values[7], W3);
+    swapComplexNumbers(values[1], values[4]);
+    swapComplexNumbers(values[3], values[6]);
 }
 
 
 
 void main() {
-    const uint radix = 2u;
     uint invocationInBlock = gl_GlobalInvocationID.x & (ubo.stageSize - 1u);
     uint blockBeginInvocation = gl_GlobalInvocationID.x - invocationInBlock;
-    uint outputIndex = invocationInBlock + blockBeginInvocation * radix;
+    uint outputIndex = invocationInBlock + blockBeginInvocation * RADIX;
+    float angle = float(invocationInBlock) * ubo.angleFactor;
+    vec2 twiddleFactor = vec2(cos(angle), sin(angle));
 
-    vec2 values[radix];
-    for(uint i = 0; i < radix; ++i)
+    vec2 values[RADIX];
+    for(uint i = 0; i < RADIX; ++i)
         values[i] = dataIn.values[indexInBuffer(gl_GlobalInvocationID.x + i * ubo.radixStride)];
 
-    butterfly(values[0], values[1], twiddle(invocationInBlock));
+    PPCAT(radix, RADIX)(values, twiddleFactor);
 
-    for(uint i = 0; i < radix; ++i)
+    for(uint i = 0; i < RADIX; ++i)
         dataOut.values[indexInBuffer(outputIndex + i * ubo.stageSize)] = values[i] * ubo.normalizationFactor;
 }
