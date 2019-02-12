@@ -1,6 +1,10 @@
 #include <stdio.h>
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
 #include <libpng16/png.h>
-#include "fft.h"
+#include "VulkanFFT.h"
+#define COUNT_OF(array) (sizeof(array) / sizeof(array[0]))
 
 
 
@@ -20,7 +24,6 @@ DataStream inputStream = {ASCII}, outputStream = {ASCII};
 
 VkInstance instance;
 VulkanFFTContext context = {};
-VkFence fence;
 VulkanFFTPlan vulkanFFTPlan = {&context};
 
 #ifndef NDEBUG
@@ -279,19 +282,12 @@ int main(int argc, const char** argv) {
         commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         commandPoolCreateInfo.queueFamilyIndex = 0;
         assert(vkCreateCommandPool(context.device, &commandPoolCreateInfo, context.allocator, &context.commandPool) == VK_SUCCESS);
-
-        VkFenceCreateInfo fenceCreateInfo = {};
-        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceCreateInfo.flags = 0;
-        assert(vkCreateFence(context.device, &fenceCreateInfo, context.allocator, &fence) == VK_SUCCESS);
     }
 
-    context.shaderModule = loadShaderModule(&context, "fft.spv");
-
     if(!listDevices) {
+        initVulkanFFTContext(&context);
         createVulkanFFT(&vulkanFFTPlan);
         readDataStream(&inputStream, &vulkanFFTPlan);
-
         VkCommandBuffer commandBuffer = createCommandBuffer(&context, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
         recordVulkanFFT(&vulkanFFTPlan, commandBuffer);
         vkEndCommandBuffer(commandBuffer);
@@ -299,15 +295,14 @@ int main(int argc, const char** argv) {
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
-        assert(vkQueueSubmit(context.queue, 1, &submitInfo, fence) == VK_SUCCESS);
-        assert(vkWaitForFences(context.device, 1, &fence, VK_TRUE, 100000000000) == VK_SUCCESS);
-
+        assert(vkQueueSubmit(context.queue, 1, &submitInfo, context.fence) == VK_SUCCESS);
+        assert(vkWaitForFences(context.device, 1, &context.fence, VK_TRUE, 100000000000) == VK_SUCCESS);
+        assert(vkResetFences(context.device, 1, &context.fence) == VK_SUCCESS);
         writeDataStream(&outputStream, &vulkanFFTPlan);
         destroyVulkanFFT(&vulkanFFTPlan);
+        freeVulkanFFTContext(&context);
     }
 
-    vkDestroyShaderModule(context.device, context.shaderModule, context.allocator);
-    vkDestroyFence(context.device, fence, context.allocator);
     vkDestroyCommandPool(context.device, context.commandPool, context.allocator);
     vkDestroyDevice(context.device, NULL);
     #ifndef NDEBUG

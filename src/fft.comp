@@ -56,11 +56,11 @@ void butterfly(inout vec2 a, inout vec2 b, vec2 w) {
 
 
 
-void radix2(inout vec2 values[2], vec2 w) {
+void fft2(inout vec2 values[2], vec2 w) {
     butterfly(values[0], values[1], w);
 }
 
-void radix4(inout vec2 values[4], vec2 w) {
+void fft4(inout vec2 values[4], vec2 w) {
     butterfly(values[0], values[2], w);
     butterfly(values[1], values[3], w);
     vec2 w0 = angleBisectComplexNumber(w, 0.5);
@@ -70,7 +70,7 @@ void radix4(inout vec2 values[4], vec2 w) {
     swapComplexNumbers(values[1], values[2]);
 }
 
-void radix8(inout vec2 values[8], vec2 w) {
+void fft8(inout vec2 values[8], vec2 w) {
     butterfly(values[0], values[4], w);
     butterfly(values[1], values[5], w);
     butterfly(values[2], values[6], w);
@@ -106,7 +106,7 @@ void main() {
     for(uint i = 0; i < RADIX; ++i)
         values[i] = dataIn.values[indexInBuffer(gl_GlobalInvocationID.x + i * ubo.radixStride)];
 
-    PPCAT(radix, RADIX)(values, twiddleFactor);
+    PPCAT(fft, RADIX)(values, twiddleFactor);
 
     for(uint i = 0; i < RADIX; ++i)
         dataOut.values[indexInBuffer(outputIndex + i * ubo.stageSize)] = values[i] * ubo.normalizationFactor;

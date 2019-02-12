@@ -1,41 +1,38 @@
-#include <math.h>
-#include <complex.h>
-#include <stdbool.h>
+#include "VulkanFFT.h"
 #include <stdlib.h>
-#include <string.h>
+#include <stdio.h>
 #include <assert.h>
-#include <vulkan/vulkan.h>
+#include <math.h>
 #define COUNT_OF(array) (sizeof(array) / sizeof(array[0]))
 
 
 
-typedef struct {
-    VkAllocationCallbacks* allocator;
-    VkPhysicalDevice physicalDevice;
-    VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
-    VkDevice device;
-    VkQueue queue;
-    VkCommandPool commandPool;
-    VkShaderModule shaderModule;
-} VulkanFFTContext;
+const uint32_t shaderModuleCode[] = {
+#include "shaderModuleCode"
+};
 
-VkShaderModule loadShaderModule(VulkanFFTContext* context, const char* filename) {
-    FILE* file = fopen(filename, "rb");
-    assert(file);
-    fseek(file, 0, SEEK_END);
-    long codeSize = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    char* code = malloc(codeSize);
-    assert(code);
-    fread(code, 1, codeSize, file);
-    fclose(file);
+void initVulkanFFTContext(VulkanFFTContext* context) {
+    VkFenceCreateInfo fenceCreateInfo = {};
+    fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceCreateInfo.flags = 0;
+    assert(vkCreateFence(context->device, &fenceCreateInfo, context->allocator, &context->fence) == VK_SUCCESS);
+    context->shaderModule = loadShaderModule(context, (const char*)shaderModuleCode, sizeof(shaderModuleCode));
+}
+
+void freeVulkanFFTContext(VulkanFFTContext* context) {
+    vkDestroyFence(context->device, context->fence, context->allocator);
+    vkDestroyShaderModule(context->device, context->shaderModule, context->allocator);
+}
+
+
+
+VkShaderModule loadShaderModule(VulkanFFTContext* context, const char* code, size_t codeSize) {
     VkShaderModuleCreateInfo shaderModuleCreateInfo = {};
     shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     shaderModuleCreateInfo.codeSize = codeSize;
     shaderModuleCreateInfo.pCode = (const uint32_t*)code;
     VkShaderModule shaderModule;
     assert(vkCreateShaderModule(context->device, &shaderModuleCreateInfo, context->allocator, &shaderModule) == VK_SUCCESS);
-    free(code);
     return shaderModule;
 }
 
@@ -83,13 +80,6 @@ VkCommandBuffer createCommandBuffer(VulkanFFTContext* context, VkCommandBufferUs
 
 
 
-typedef struct {
-    VulkanFFTContext* context;
-    VkDeviceSize size;
-    VkBuffer hostBuffer, deviceBuffer;
-    VkDeviceMemory deviceMemory;
-} VulkanFFTTransfer;
-
 void bufferTransfer(VulkanFFTContext* context, VkBuffer dstBuffer, VkBuffer srcBuffer, VkDeviceSize size) {
     VkCommandBuffer commandBuffer = createCommandBuffer(context, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
     VkBufferCopy copyRegion = {};
@@ -102,8 +92,9 @@ void bufferTransfer(VulkanFFTContext* context, VkBuffer dstBuffer, VkBuffer srcB
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
-    vkQueueSubmit(context->queue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(context->queue);
+    assert(vkQueueSubmit(context->queue, 1, &submitInfo, context->fence) == VK_SUCCESS);
+    assert(vkWaitForFences(context->device, 1, &context->fence, VK_TRUE, 100000000000) == VK_SUCCESS);
+    assert(vkResetFences(context->device, 1, &context->fence) == VK_SUCCESS);
     vkFreeCommandBuffers(context->device, context->commandPool, 1, &commandBuffer);
 }
 
@@ -131,6 +122,8 @@ void freeVulkanFFTTransfer(VulkanFFTTransfer* vulkanFFTTransfer) {
     vkFreeMemory(vulkanFFTTransfer->context->device, vulkanFFTTransfer->deviceMemory, vulkanFFTTransfer->context->allocator);
 }
 
+
+
 typedef union {
     struct {
         uint32_t strideX, strideY, strideZ;
@@ -140,30 +133,9 @@ typedef union {
         float normalizationFactor;
     };
     unsigned char padding[0x100];
-} UBO;
+} VulkanFFTUBO;
 
-typedef struct {
-    uint32_t sampleCount;
-    uint32_t stageCount;
-    uint32_t* stageRadix;
-    VkDeviceSize uboSize;
-    VkBuffer ubo;
-    VkDeviceMemory uboDeviceMemory;
-    VkDescriptorPool descriptorPool;
-    VkDescriptorSetLayout* descriptorSetLayouts;
-    VkDescriptorSet* descriptorSets;
-    VkPipelineLayout pipelineLayout;
-    VkPipeline pipeline;
-} VulkanFFTAxis;
-
-typedef struct {
-    VulkanFFTContext* context;
-    bool inverse, resultInSwapBuffer;
-    VulkanFFTAxis axes[3];
-    VkDeviceSize bufferSize;
-    VkBuffer buffer[2];
-    VkDeviceMemory deviceMemory[2];
-} VulkanFFTPlan;
+typedef struct VulkanFFTAxis VulkanFFTAxis;
 
 void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
     VulkanFFTAxis* vulkanFFTAxis = &vulkanFFTPlan->axes[axis];
@@ -182,13 +154,13 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
     }
 
     {
-        vulkanFFTAxis->uboSize = sizeof(UBO) * vulkanFFTAxis->stageCount;
+        vulkanFFTAxis->uboSize = sizeof(VulkanFFTUBO) * vulkanFFTAxis->stageCount;
         createBuffer(vulkanFFTPlan->context, &vulkanFFTAxis->ubo, &vulkanFFTAxis->uboDeviceMemory, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_HEAP_DEVICE_LOCAL_BIT, vulkanFFTAxis->uboSize);
         VulkanFFTTransfer vulkanFFTTransfer;
         vulkanFFTTransfer.context = vulkanFFTPlan->context;
         vulkanFFTTransfer.size = vulkanFFTAxis->uboSize;
         vulkanFFTTransfer.deviceBuffer = vulkanFFTAxis->ubo;
-        UBO* ubo = createVulkanFFTUpload(&vulkanFFTTransfer);
+        VulkanFFTUBO* ubo = createVulkanFFTUpload(&vulkanFFTTransfer);
         const uint32_t remap[3][3] = {{0, 1, 2}, {1, 2, 0}, {2, 0, 1}};
         uint32_t strides[3] = {1, vulkanFFTPlan->axes[0].sampleCount, vulkanFFTPlan->axes[0].sampleCount * vulkanFFTPlan->axes[1].sampleCount};
         uint32_t stageSize = 1;
@@ -249,8 +221,8 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
                 VkDescriptorBufferInfo descriptorBufferInfo = {};
                 if(i == 0) {
                     descriptorBufferInfo.buffer = vulkanFFTAxis->ubo;
-                    descriptorBufferInfo.offset = sizeof(UBO) * j;
-                    descriptorBufferInfo.range = sizeof(UBO);
+                    descriptorBufferInfo.offset = sizeof(VulkanFFTUBO) * j;
+                    descriptorBufferInfo.range = sizeof(VulkanFFTUBO);
                 } else {
                     descriptorBufferInfo.buffer = vulkanFFTPlan->buffer[1 - (vulkanFFTPlan->resultInSwapBuffer + i + j) % 2];
                     descriptorBufferInfo.offset = 0;
@@ -269,16 +241,18 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
     }
 
     {
-        VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo = {};
-        pipelineShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        pipelineShaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        pipelineShaderStageCreateInfo.module = vulkanFFTPlan->context->shaderModule;
-        pipelineShaderStageCreateInfo.pName = "main";
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
         pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutCreateInfo.setLayoutCount = vulkanFFTAxis->stageCount;
         pipelineLayoutCreateInfo.pSetLayouts = vulkanFFTAxis->descriptorSetLayouts;
         assert(vkCreatePipelineLayout(vulkanFFTPlan->context->device, &pipelineLayoutCreateInfo, vulkanFFTPlan->context->allocator, &vulkanFFTAxis->pipelineLayout) == VK_SUCCESS);
+        char pName[64];
+        sprintf(pName, "radix%d", vulkanFFTAxis->stageRadix[0]);
+        VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo = {};
+        pipelineShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        pipelineShaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        pipelineShaderStageCreateInfo.module = vulkanFFTPlan->context->shaderModule;
+        pipelineShaderStageCreateInfo.pName = pName;
         VkComputePipelineCreateInfo computePipelineCreateInfo = {};
         computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
         computePipelineCreateInfo.stage = pipelineShaderStageCreateInfo;
