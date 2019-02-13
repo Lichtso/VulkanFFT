@@ -1,0 +1,22 @@
+language: c
+sudo: required
+
+matrix:
+    include:
+        - os: linux
+          dist: xenial
+        - os: osx
+
+compiler:
+  - clang
+
+install:
+  - .travis/install.sh
+
+script:
+  - cat environments.sh
+  - source environments.sh
+  - mkdir -p build && cd build
+  - cmake .. -DVULKAN_SDK=$VULKAN_SDK
+  - make
+  - ./vulkanfft --list-devices
