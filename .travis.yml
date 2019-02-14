@@ -8,15 +8,13 @@ matrix:
         - os: osx
 
 compiler:
-  - clang
+    - clang
 
 install:
-  - .travis/install.sh
+    - .travis/install.sh
 
 script:
-  - cat environments.sh
-  - source environments.sh
-  - mkdir -p build && cd build
-  - cmake .. -DVULKAN_SDK=$VULKAN_SDK
-  - make
-  - ./vulkanfft --list-devices
+    - source environments.sh
+    - mkdir -p build && cd build
+    - cmake .. -DVULKAN_SDK=$VULKAN_SDK
+    - make

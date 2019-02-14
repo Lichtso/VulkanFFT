@@ -196,27 +196,55 @@ int main(int argc, const char** argv) {
     }
 
     {
+        const char* requiredLayers[] = {
+            #ifndef NDEBUG
+            "VK_LAYER_LUNARG_standard_validation"
+            #endif
+        };
+        const char* requiredExtensions[] = {
+            #ifndef NDEBUG
+            VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+            #endif
+        };
         uint32_t instanceLayerCount;
         assert(vkEnumerateInstanceLayerProperties(&instanceLayerCount, NULL) == VK_SUCCESS);
         if(instanceLayerCount == 0)
             abortWithError("No layers found: Is VK_LAYER_PATH set correctly?");
         VkLayerProperties instanceLayers[instanceLayerCount];
         assert(vkEnumerateInstanceLayerProperties(&instanceLayerCount, instanceLayers) == VK_SUCCESS);
+        for(uint32_t i = 0; i < COUNT_OF(requiredLayers); ++i) {
+            bool found = false;
+            for(uint32_t j = 0; j < instanceLayerCount; ++j)
+                if(strcmp(requiredLayers[i], instanceLayers[j].layerName) == 0) {
+                    found = true;
+                    break;
+                }
+            if(!found) {
+                fprintf(stderr, "Required layer %s was not found\n", requiredLayers[i]);
+                exit(1);
+            }
+        }
+        uint32_t extensionCount;
+        vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, NULL);
+        VkExtensionProperties extensions[extensionCount];
+        vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, extensions);
+        for(uint32_t i = 0; i < COUNT_OF(requiredExtensions); ++i) {
+            bool found = false;
+            for(uint32_t j = 0; j < extensionCount; ++j)
+                if(strcmp(requiredExtensions[i], extensions[j].extensionName) == 0) {
+                    found = true;
+                    break;
+                }
+            if(!found) {
+                fprintf(stderr, "Required extension %s was not found\n", requiredExtensions[i]);
+                exit(1);
+            }
+        }
         VkInstanceCreateInfo instanceCreateInfo = {};
-        const char* layers[] = {
-            #ifndef NDEBUG
-            "VK_LAYER_LUNARG_standard_validation"
-            #endif
-        };
-        instanceCreateInfo.enabledLayerCount = COUNT_OF(layers);
-        instanceCreateInfo.ppEnabledLayerNames = layers;
-        const char* extensions[] = {
-            #ifndef NDEBUG
-            VK_EXT_DEBUG_UTILS_EXTENSION_NAME
-            #endif
-        };
-        instanceCreateInfo.enabledExtensionCount = COUNT_OF(extensions);
-        instanceCreateInfo.ppEnabledExtensionNames = extensions;
+        instanceCreateInfo.enabledLayerCount = COUNT_OF(requiredLayers);
+        instanceCreateInfo.ppEnabledLayerNames = requiredLayers;
+        instanceCreateInfo.enabledExtensionCount = COUNT_OF(requiredExtensions);
+        instanceCreateInfo.ppEnabledExtensionNames = requiredExtensions;
         VkResult result = vkCreateInstance(&instanceCreateInfo, context.allocator, &instance);
         if(result == VK_ERROR_INCOMPATIBLE_DRIVER)
             abortWithError("No driver found, could not create instance: Is VK_ICD_FILENAMES set correctly?");
