@@ -18,12 +18,13 @@ add_library(SharedLibrary SHARED $<TARGET_OBJECTS:ObjectLibrary>)
 set_target_properties(StaticLibrary SharedLibrary PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
 target_link_libraries(SharedLibrary ${Vulkan_LIBRARIES})
 
+add_executable(CLI src/cli.c)
+set_target_properties(CLI PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
+target_link_libraries(CLI SharedLibrary ${Vulkan_LIBRARIES})
+
 find_package(PNG 1.6.0)
 if(${PNG_FOUND})
-    add_executable(CLI src/cli.c)
-    set_target_properties(CLI PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
-    target_link_libraries(CLI SharedLibrary)
-    target_link_libraries(CLI ${Vulkan_LIBRARIES})
+    target_compile_definitions(CLI PRIVATE PNG_FOUND)
     target_link_libraries(CLI ${PNG_LIBRARY})
 endif()
 

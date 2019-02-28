@@ -1,9 +1,11 @@
+#include "VulkanFFT.h"
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef PNG_FOUND
 #include <libpng16/png.h>
-#include "VulkanFFT.h"
+#endif
 #define COUNT_OF(array) (sizeof(array) / sizeof(array[0]))
 
 
@@ -16,7 +18,9 @@ typedef struct {
     enum {
         RAW,
         ASCII,
-        PNG
+#ifdef PNG_FOUND
+        PNG,
+#endif
     } type;
     FILE* file;
 } DataStream;
@@ -59,8 +63,8 @@ void readDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
                 data[i] = real + imag * I;
             }
         break;
+#ifdef PNG_FOUND
         case PNG: {
-#ifdef PNG_LIBPNG_VER_STRING
             png_byte pngsig[8];
             assert(fread(pngsig, 1, sizeof(pngsig), dataStream->file) == sizeof(pngsig));
             assert(png_sig_cmp(pngsig, 0, sizeof(pngsig)) == 0);
@@ -96,8 +100,8 @@ void readDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
             }
             png_read_end(pngPtr, NULL);
             free(rowPtrs);
-#endif
         } break;
+#endif
     }
     freeVulkanFFTTransfer(&vulkanFFTTransfer);
 }
@@ -125,8 +129,8 @@ void writeDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
                 }
             }
             break;
+#ifdef PNG_FOUND
         case PNG: {
-#ifdef PNG_LIBPNG_VER_STRING
             png_structp pngPtr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
             assert(pngPtr);
             png_infop infoPtr = png_create_info_struct(pngPtr);
@@ -151,8 +155,8 @@ void writeDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
             png_write_image(pngPtr, rowPtrs);
             png_write_end(pngPtr, NULL);
             free(rowPtrs);
-#endif
         } break;
+#endif
     }
     freeVulkanFFTTransfer(&vulkanFFTTransfer);
 }
@@ -184,8 +188,10 @@ int main(int argc, const char** argv) {
                 dataStream->type = RAW;
             else if(strcmp(argv[i], "ascii") == 0)
                 dataStream->type = ASCII;
+#ifdef PNG_FOUND
             else if(strcmp(argv[i], "png") == 0)
                 dataStream->type = PNG;
+#endif
         } else if(strcmp(argv[i], "--device") == 0) {
             assert(++i < argc);
             sscanf(argv[i], "%d", &deviceIndex);

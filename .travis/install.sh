@@ -12,7 +12,7 @@ export VK_ICD_FILENAMES=$VULKAN_SDK/etc/vulkan/icd.d/MoltenVK_icd.json
 export VK_LAYER_PATH=$VULKAN_SDK/etc/vulkan/explicit_layer.d
 EOF
     sudo cp -R $VULKAN_SDK/Frameworks/* /Library/Frameworks/
-else
+elif [[ $TRAVIS_OS_NAME == 'linux' ]]; then
     sudo apt-get -qq update
     sudo apt-get install -y cmake libpng16-dev
     curl -GO https://sdk.lunarg.com/sdk/download/latest/linux/vulkan-sdk.tar.gz
@@ -25,4 +25,7 @@ export VK_LAYER_PATH=$VULKAN_SDK/etc/explicit_layer.d
 EOF
     sudo cp -R $VULKAN_SDK/include/* /usr/local/include/
     sudo cp -R $VULKAN_SDK/lib/* /usr/local/lib/
+elif [[ $TRAVIS_OS_NAME == 'windows' ]]; then
+    curl -GO https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe
+    ./vulkan-sdk.exe /S
 fi
