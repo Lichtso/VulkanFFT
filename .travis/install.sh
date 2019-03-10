@@ -1,9 +1,9 @@
 #!/bin/bash
 
-export VK_VERSION=1.1.97.0
+export VK_VERSION=1.1.101.0
 if [[ $TRAVIS_OS_NAME == 'osx' ]]; then
     brew install libpng
-    curl -GO https://sdk.lunarg.com/sdk/download/latest/mac/vulkan-sdk.tar.gz
+    curl -GO https://sdk.lunarg.com/sdk/download/$VK_VERSION/mac/vulkan-sdk.tar.gz
     tar zxf vulkan-sdk.tar.gz
     export VULKAN_SDK=$TRAVIS_BUILD_DIR/vulkansdk-macos-$VK_VERSION/macOS
 cat > environments.sh << EOF
@@ -15,7 +15,7 @@ EOF
 elif [[ $TRAVIS_OS_NAME == 'linux' ]]; then
     sudo apt-get -qq update
     sudo apt-get install -y cmake libpng16-dev
-    curl -GO https://sdk.lunarg.com/sdk/download/latest/linux/vulkan-sdk.tar.gz
+    curl -GO https://sdk.lunarg.com/sdk/download/$VK_VERSION/linux/vulkan-sdk.tar.gz
     tar zxf vulkan-sdk.tar.gz
     export VULKAN_SDK=$TRAVIS_BUILD_DIR/$VK_VERSION/x86_64
 cat > environments.sh << EOF
