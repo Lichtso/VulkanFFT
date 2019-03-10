@@ -46,7 +46,7 @@ typedef struct {
         VkDescriptorSetLayout* descriptorSetLayouts;
         VkDescriptorSet* descriptorSets;
         VkPipelineLayout pipelineLayout;
-        VkPipeline pipeline;
+        VkPipeline* pipelines;
     } axes[3];
     VkDeviceSize bufferSize;
     VkBuffer buffer[2];

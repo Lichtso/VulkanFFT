@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <math.h>
 #define COUNT_OF(array) (sizeof(array) / sizeof(array[0]))
-
+#define SUPPORTED_RADIX_LEVELS 3
 
 
 const uint32_t shaderModuleCode[] = {
@@ -126,7 +126,7 @@ void freeVulkanFFTTransfer(VulkanFFTTransfer* vulkanFFTTransfer) {
 
 typedef union {
     struct {
-        uint32_t strideX, strideY, strideZ;
+        uint32_t stride[3];
         uint32_t radixStride, stageSize;
         float directionFactor;
         float angleFactor;
@@ -165,9 +165,9 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
         uint32_t strides[3] = {1, vulkanFFTPlan->axes[0].sampleCount, vulkanFFTPlan->axes[0].sampleCount * vulkanFFTPlan->axes[1].sampleCount};
         uint32_t stageSize = 1;
         for(uint32_t j = 0; j < vulkanFFTAxis->stageCount; ++j) {
-            ubo[j].strideX = strides[remap[axis][0]];
-            ubo[j].strideY = strides[remap[axis][1]];
-            ubo[j].strideZ = strides[remap[axis][2]];
+            ubo[j].stride[0] = strides[remap[axis][0]];
+            ubo[j].stride[1] = strides[remap[axis][1]];
+            ubo[j].stride[2] = strides[remap[axis][2]];
             ubo[j].radixStride = vulkanFFTAxis->sampleCount / vulkanFFTAxis->stageRadix[j];
             ubo[j].stageSize = stageSize;
             ubo[j].directionFactor = (vulkanFFTPlan->inverse) ? -1.0 : 1.0;
@@ -241,23 +241,26 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
     }
 
     {
+        vulkanFFTAxis->pipelines = (VkPipeline*)malloc(sizeof(VkPipeline) * SUPPORTED_RADIX_LEVELS);
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
         pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutCreateInfo.setLayoutCount = vulkanFFTAxis->stageCount;
         pipelineLayoutCreateInfo.pSetLayouts = vulkanFFTAxis->descriptorSetLayouts;
         assert(vkCreatePipelineLayout(vulkanFFTPlan->context->device, &pipelineLayoutCreateInfo, vulkanFFTPlan->context->allocator, &vulkanFFTAxis->pipelineLayout) == VK_SUCCESS);
         char pName[64];
-        sprintf(pName, "radix%d", vulkanFFTAxis->stageRadix[0]);
-        VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo = {};
-        pipelineShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        pipelineShaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        pipelineShaderStageCreateInfo.module = vulkanFFTPlan->context->shaderModule;
-        pipelineShaderStageCreateInfo.pName = pName;
-        VkComputePipelineCreateInfo computePipelineCreateInfo = {};
-        computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        computePipelineCreateInfo.stage = pipelineShaderStageCreateInfo;
-        computePipelineCreateInfo.layout = vulkanFFTAxis->pipelineLayout;
-        assert(vkCreateComputePipelines(vulkanFFTPlan->context->device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, vulkanFFTPlan->context->allocator, &vulkanFFTAxis->pipeline) == VK_SUCCESS);
+        VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo[SUPPORTED_RADIX_LEVELS] = {};
+        VkComputePipelineCreateInfo computePipelineCreateInfo[SUPPORTED_RADIX_LEVELS] = {};
+        for(uint32_t i = 0; i < SUPPORTED_RADIX_LEVELS; ++i) {
+            sprintf(pName, "radix%d", 2);
+            pipelineShaderStageCreateInfo[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            pipelineShaderStageCreateInfo[i].stage = VK_SHADER_STAGE_COMPUTE_BIT;
+            pipelineShaderStageCreateInfo[i].module = vulkanFFTPlan->context->shaderModule;
+            pipelineShaderStageCreateInfo[i].pName = pName;
+            computePipelineCreateInfo[i].sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+            computePipelineCreateInfo[i].stage = pipelineShaderStageCreateInfo[i];
+            computePipelineCreateInfo[i].layout = vulkanFFTAxis->pipelineLayout;
+        }
+        assert(vkCreateComputePipelines(vulkanFFTPlan->context->device, VK_NULL_HANDLE, SUPPORTED_RADIX_LEVELS, computePipelineCreateInfo, vulkanFFTPlan->context->allocator, vulkanFFTAxis->pipelines) == VK_SUCCESS);
     }
 
     if(vulkanFFTAxis->stageCount & 1)
@@ -280,8 +283,8 @@ void recordVulkanFFT(VulkanFFTPlan* vulkanFFTPlan, VkCommandBuffer commandBuffer
         if(vulkanFFTPlan->axes[i].sampleCount <= 1)
             continue;
         VulkanFFTAxis* vulkanFFTAxis = &vulkanFFTPlan->axes[i];
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkanFFTAxis->pipeline);
         for(uint32_t j = 0; j < vulkanFFTAxis->stageCount; ++j) {
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkanFFTAxis->pipelines[__builtin_ctz(vulkanFFTAxis->stageRadix[j])-1]);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkanFFTAxis->pipelineLayout, 0, 1, &vulkanFFTAxis->descriptorSets[j], 0, NULL);
             vkCmdDispatch(commandBuffer, vulkanFFTAxis->sampleCount / vulkanFFTAxis->stageRadix[j], vulkanFFTPlan->axes[remap[i][1]].sampleCount, vulkanFFTPlan->axes[remap[i][2]].sampleCount);
         }
@@ -299,7 +302,9 @@ void destroyVulkanFFT(VulkanFFTPlan* vulkanFFTPlan) {
         for(uint32_t j = 0; j < vulkanFFTAxis->stageCount; ++j)
             vkDestroyDescriptorSetLayout(vulkanFFTPlan->context->device, vulkanFFTAxis->descriptorSetLayouts[j], vulkanFFTPlan->context->allocator);
         vkDestroyPipelineLayout(vulkanFFTPlan->context->device, vulkanFFTAxis->pipelineLayout, vulkanFFTPlan->context->allocator);
-        vkDestroyPipeline(vulkanFFTPlan->context->device, vulkanFFTAxis->pipeline, vulkanFFTPlan->context->allocator);
+        for(uint32_t j = 0; j < SUPPORTED_RADIX_LEVELS; ++j)
+            vkDestroyPipeline(vulkanFFTPlan->context->device, vulkanFFTAxis->pipelines[j], vulkanFFTPlan->context->allocator);
+        free(vulkanFFTAxis->pipelines);
         free(vulkanFFTAxis->stageRadix);
         free(vulkanFFTAxis->descriptorSetLayouts);
         free(vulkanFFTAxis->descriptorSets);

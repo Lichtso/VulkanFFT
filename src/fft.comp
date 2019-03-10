@@ -6,9 +6,7 @@
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 layout(binding = 0) uniform UBO {
-    uint strideX;
-    uint strideY;
-    uint strideZ;
+    uvec3 stride;
     uint radixStride;
     uint stageSize;
     float directionFactor;
@@ -25,7 +23,7 @@ layout(binding = 2) writeonly buffer DataOut {
 } dataOut;
 
 uint indexInBuffer(uint index) {
-    return index * ubo.strideX + gl_GlobalInvocationID.y * ubo.strideY + gl_GlobalInvocationID.z * ubo.strideZ;
+    return index * ubo.stride.x + gl_GlobalInvocationID.y * ubo.stride.y + gl_GlobalInvocationID.z * ubo.stride.z;
 }
 
 
@@ -34,6 +32,14 @@ void swapComplexNumbers(inout vec2 a, inout vec2 b) {
     vec2 aux = b;
     b = a;
     a = aux;
+}
+
+vec2 addComplexNumbers(vec2 a, vec2 b) {
+    return a + b;
+}
+
+vec2 subComplexNumbers(vec2 a, vec2 b) {
+    return a - b;
 }
 
 vec2 multComplexNumbers(vec2 a, vec2 b) {
@@ -50,8 +56,8 @@ vec2 angleBisectComplexNumber(vec2 w, float k) {
 
 void butterfly(inout vec2 a, inout vec2 b, vec2 w) {
     vec2 t = multComplexNumbers(b, w);
-    b = a - t;
-    a = a + t;
+    b = subComplexNumbers(a, t);
+    a = addComplexNumbers(a, t);
 }
 
 
