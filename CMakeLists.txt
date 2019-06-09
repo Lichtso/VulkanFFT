@@ -2,21 +2,22 @@ cmake_minimum_required(VERSION 3.11)
 project(vulkanfft VERSION 0.0.1 DESCRIPTION "Fast Fourier Transform using the Vulkan API")
 find_package(Vulkan REQUIRED)
 
-add_custom_command(OUTPUT shaderModuleCode
-    COMMAND ${VULKAN_SDK}/bin/glslangValidator -V -e radix2 -DRADIX=2 -o fft.spv --source-entrypoint main ${CMAKE_SOURCE_DIR}/src/fft.comp
-    COMMAND hexdump -v -e '/4 \"0x%08X, \"' fft.spv > shaderModuleCode
-    DEPENDS ${CMAKE_SOURCE_DIR}/src/fft.comp
-)
-add_custom_target(ShaderModuleCode DEPENDS shaderModuleCode)
-
 add_library(ObjectLibrary OBJECT src/VulkanFFT.c)
-add_dependencies(ObjectLibrary ShaderModuleCode)
 include_directories(ObjectLibrary PRIVATE include ${CMAKE_BINARY_DIR})
 set_property(TARGET ObjectLibrary PROPERTY POSITION_INDEPENDENT_CODE ON)
 add_library(StaticLibrary STATIC $<TARGET_OBJECTS:ObjectLibrary>)
 add_library(SharedLibrary SHARED $<TARGET_OBJECTS:ObjectLibrary>)
 set_target_properties(StaticLibrary SharedLibrary PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
 target_link_libraries(SharedLibrary ${Vulkan_LIBRARIES})
+foreach(radix 2 4 8)
+    add_custom_command(OUTPUT radix${radix}.hex
+        COMMAND ${VULKAN_SDK}/bin/glslc -O -DRADIX=${radix} -o radix${radix}.spv ${CMAKE_SOURCE_DIR}/src/fft.comp
+        COMMAND hexdump -v -e '/4 \"0x%08X, \"' radix${radix}.spv > radix${radix}.hex
+        DEPENDS ${CMAKE_SOURCE_DIR}/src/fft.comp
+    )
+    add_custom_target(radix${radix}ShaderModuleTarget DEPENDS radix${radix}.hex)
+    add_dependencies(ObjectLibrary radix${radix}ShaderModuleTarget)
+endforeach()
 
 add_executable(CLI src/cli.c)
 set_target_properties(CLI PROPERTIES OUTPUT_NAME ${PROJECT_NAME})

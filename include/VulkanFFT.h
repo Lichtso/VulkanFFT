@@ -1,16 +1,19 @@
 #include <vulkan/vulkan.h>
 #include <stdbool.h>
 #include <complex.h>
+#define SUPPORTED_RADIX_LEVELS 3
 
 typedef struct {
     VkAllocationCallbacks* allocator;
     VkPhysicalDevice physicalDevice;
+    VkPhysicalDeviceProperties physicalDeviceProperties;
     VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
     VkDevice device;
     VkQueue queue;
     VkCommandPool commandPool;
     VkFence fence;
-    VkShaderModule shaderModule;
+    VkShaderModule shaderModules[SUPPORTED_RADIX_LEVELS];
+    uint32_t uboAlignment;
 } VulkanFFTContext;
 
 void initVulkanFFTContext(VulkanFFTContext* context);
@@ -23,7 +26,7 @@ typedef struct {
     VkDeviceMemory deviceMemory;
 } VulkanFFTTransfer;
 
-VkShaderModule loadShaderModule(VulkanFFTContext* context, const char* code, size_t codeSize);
+VkShaderModule loadShaderModule(VulkanFFTContext* context, const uint32_t* code, size_t codeSize);
 void createBuffer(VulkanFFTContext* context, VkBuffer* buffer, VkDeviceMemory* deviceMemory, VkBufferUsageFlags usage, VkMemoryPropertyFlags propertyFlags, VkDeviceSize size);
 VkCommandBuffer createCommandBuffer(VulkanFFTContext* context, VkCommandBufferUsageFlags usageFlags);
 

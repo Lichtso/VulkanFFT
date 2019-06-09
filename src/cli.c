@@ -293,7 +293,6 @@ int main(int argc, const char** argv) {
             vkGetPhysicalDeviceQueueFamilyProperties(physicalDevices[i], &queueFamilyCount, queueFamilies);
         }
         context.physicalDevice = physicalDevices[deviceIndex];
-        vkGetPhysicalDeviceMemoryProperties(context.physicalDevice, &context.physicalDeviceMemoryProperties);
 
         VkDeviceQueueCreateInfo deviceQueueCreateInfo = {};
         deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;

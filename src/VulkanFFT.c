@@ -1,36 +1,54 @@
 #include "VulkanFFT.h"
 #include <stdlib.h>
-#include <stdio.h>
 #include <assert.h>
 #include <math.h>
 #define COUNT_OF(array) (sizeof(array) / sizeof(array[0]))
-#define SUPPORTED_RADIX_LEVELS 3
 
-
-const uint32_t shaderModuleCode[] = {
-#include "shaderModuleCode"
+const uint32_t radix2ShaderModule[] = {
+#include "radix2.hex"
+};
+const uint32_t radix4ShaderModule[] = {
+#include "radix4.hex"
+};
+const uint32_t radix8ShaderModule[] = {
+#include "radix8.hex"
+};
+const uint32_t* shaderModuleCode[] = {
+    radix2ShaderModule,
+    radix4ShaderModule,
+    radix8ShaderModule
+};
+const uint32_t shaderModuleSize[] = {
+    sizeof(radix2ShaderModule),
+    sizeof(radix4ShaderModule),
+    sizeof(radix8ShaderModule)
 };
 
 void initVulkanFFTContext(VulkanFFTContext* context) {
+    vkGetPhysicalDeviceProperties(context->physicalDevice, &context->physicalDeviceProperties);
+    vkGetPhysicalDeviceMemoryProperties(context->physicalDevice, &context->physicalDeviceMemoryProperties);
     VkFenceCreateInfo fenceCreateInfo = {};
     fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceCreateInfo.flags = 0;
     assert(vkCreateFence(context->device, &fenceCreateInfo, context->allocator, &context->fence) == VK_SUCCESS);
-    context->shaderModule = loadShaderModule(context, (const char*)shaderModuleCode, sizeof(shaderModuleCode));
+    for(uint32_t i = 0; i < SUPPORTED_RADIX_LEVELS; ++i)
+        context->shaderModules[i] = loadShaderModule(context, shaderModuleCode[i], shaderModuleSize[i]);
+    context->uboAlignment = context->physicalDeviceProperties.limits.minUniformBufferOffsetAlignment;
 }
 
 void freeVulkanFFTContext(VulkanFFTContext* context) {
     vkDestroyFence(context->device, context->fence, context->allocator);
-    vkDestroyShaderModule(context->device, context->shaderModule, context->allocator);
+    for(uint32_t i = 0; i < SUPPORTED_RADIX_LEVELS; ++i)
+        vkDestroyShaderModule(context->device, context->shaderModules[i], context->allocator);
 }
 
 
 
-VkShaderModule loadShaderModule(VulkanFFTContext* context, const char* code, size_t codeSize) {
+VkShaderModule loadShaderModule(VulkanFFTContext* context, const uint32_t* code, size_t codeSize) {
     VkShaderModuleCreateInfo shaderModuleCreateInfo = {};
     shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     shaderModuleCreateInfo.codeSize = codeSize;
-    shaderModuleCreateInfo.pCode = (const uint32_t*)code;
+    shaderModuleCreateInfo.pCode = code;
     VkShaderModule shaderModule;
     assert(vkCreateShaderModule(context->device, &shaderModuleCreateInfo, context->allocator, &shaderModule) == VK_SUCCESS);
     return shaderModule;
@@ -124,15 +142,12 @@ void freeVulkanFFTTransfer(VulkanFFTTransfer* vulkanFFTTransfer) {
 
 
 
-typedef union {
-    struct {
-        uint32_t stride[3];
-        uint32_t radixStride, stageSize;
-        float directionFactor;
-        float angleFactor;
-        float normalizationFactor;
-    };
-    unsigned char padding[0x100];
+typedef struct {
+    uint32_t stride[3];
+    uint32_t radixStride, stageSize;
+    float directionFactor;
+    float angleFactor;
+    float normalizationFactor;
 } VulkanFFTUBO;
 
 typedef struct VulkanFFTAxis VulkanFFTAxis;
@@ -146,33 +161,38 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
         uint32_t stageSize = vulkanFFTAxis->sampleCount;
         vulkanFFTAxis->stageCount = 0;
         while(stageSize > 1) {
-            vulkanFFTAxis->stageRadix[vulkanFFTAxis->stageCount] = 2;
-            assert(stageSize % vulkanFFTAxis->stageRadix[vulkanFFTAxis->stageCount] == 0);
+            uint32_t radixIndex = SUPPORTED_RADIX_LEVELS;
+            do {
+                assert(radixIndex > 0);
+                --radixIndex;
+                vulkanFFTAxis->stageRadix[vulkanFFTAxis->stageCount] = 2<<radixIndex;
+            } while(stageSize % vulkanFFTAxis->stageRadix[vulkanFFTAxis->stageCount] > 0);
             stageSize /= vulkanFFTAxis->stageRadix[vulkanFFTAxis->stageCount];
             ++vulkanFFTAxis->stageCount;
         }
     }
 
     {
-        vulkanFFTAxis->uboSize = sizeof(VulkanFFTUBO) * vulkanFFTAxis->stageCount;
+        vulkanFFTAxis->uboSize = vulkanFFTPlan->context->uboAlignment * vulkanFFTAxis->stageCount;
         createBuffer(vulkanFFTPlan->context, &vulkanFFTAxis->ubo, &vulkanFFTAxis->uboDeviceMemory, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_HEAP_DEVICE_LOCAL_BIT, vulkanFFTAxis->uboSize);
         VulkanFFTTransfer vulkanFFTTransfer;
         vulkanFFTTransfer.context = vulkanFFTPlan->context;
         vulkanFFTTransfer.size = vulkanFFTAxis->uboSize;
         vulkanFFTTransfer.deviceBuffer = vulkanFFTAxis->ubo;
-        VulkanFFTUBO* ubo = createVulkanFFTUpload(&vulkanFFTTransfer);
+        char* ubo = createVulkanFFTUpload(&vulkanFFTTransfer);
         const uint32_t remap[3][3] = {{0, 1, 2}, {1, 2, 0}, {2, 0, 1}};
         uint32_t strides[3] = {1, vulkanFFTPlan->axes[0].sampleCount, vulkanFFTPlan->axes[0].sampleCount * vulkanFFTPlan->axes[1].sampleCount};
         uint32_t stageSize = 1;
         for(uint32_t j = 0; j < vulkanFFTAxis->stageCount; ++j) {
-            ubo[j].stride[0] = strides[remap[axis][0]];
-            ubo[j].stride[1] = strides[remap[axis][1]];
-            ubo[j].stride[2] = strides[remap[axis][2]];
-            ubo[j].radixStride = vulkanFFTAxis->sampleCount / vulkanFFTAxis->stageRadix[j];
-            ubo[j].stageSize = stageSize;
-            ubo[j].directionFactor = (vulkanFFTPlan->inverse) ? -1.0 : 1.0;
-            ubo[j].angleFactor = ubo[j].directionFactor * M_PI / (float)ubo[j].stageSize;
-            ubo[j].normalizationFactor = (vulkanFFTPlan->inverse) ? 1.0 : 1.0 / vulkanFFTAxis->stageRadix[j];
+            VulkanFFTUBO* uboFrame = (VulkanFFTUBO*)&ubo[vulkanFFTPlan->context->uboAlignment * j];
+            uboFrame->stride[0] = strides[remap[axis][0]];
+            uboFrame->stride[1] = strides[remap[axis][1]];
+            uboFrame->stride[2] = strides[remap[axis][2]];
+            uboFrame->radixStride = vulkanFFTAxis->sampleCount / vulkanFFTAxis->stageRadix[j];
+            uboFrame->stageSize = stageSize;
+            uboFrame->directionFactor = (vulkanFFTPlan->inverse) ? -1.0 : 1.0;
+            uboFrame->angleFactor = uboFrame->directionFactor * M_PI / (float)uboFrame->stageSize;
+            uboFrame->normalizationFactor = (vulkanFFTPlan->inverse) ? 1.0 : 1.0 / vulkanFFTAxis->stageRadix[j];
             stageSize *= vulkanFFTAxis->stageRadix[j];
         }
         freeVulkanFFTTransfer(&vulkanFFTTransfer);
@@ -221,7 +241,7 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
                 VkDescriptorBufferInfo descriptorBufferInfo = {};
                 if(i == 0) {
                     descriptorBufferInfo.buffer = vulkanFFTAxis->ubo;
-                    descriptorBufferInfo.offset = sizeof(VulkanFFTUBO) * j;
+                    descriptorBufferInfo.offset = vulkanFFTPlan->context->uboAlignment * j;
                     descriptorBufferInfo.range = sizeof(VulkanFFTUBO);
                 } else {
                     descriptorBufferInfo.buffer = vulkanFFTPlan->buffer[1 - (vulkanFFTPlan->resultInSwapBuffer + i + j) % 2];
@@ -247,15 +267,13 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
         pipelineLayoutCreateInfo.setLayoutCount = vulkanFFTAxis->stageCount;
         pipelineLayoutCreateInfo.pSetLayouts = vulkanFFTAxis->descriptorSetLayouts;
         assert(vkCreatePipelineLayout(vulkanFFTPlan->context->device, &pipelineLayoutCreateInfo, vulkanFFTPlan->context->allocator, &vulkanFFTAxis->pipelineLayout) == VK_SUCCESS);
-        char pName[64];
         VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo[SUPPORTED_RADIX_LEVELS] = {};
         VkComputePipelineCreateInfo computePipelineCreateInfo[SUPPORTED_RADIX_LEVELS] = {};
         for(uint32_t i = 0; i < SUPPORTED_RADIX_LEVELS; ++i) {
-            sprintf(pName, "radix%d", 2);
             pipelineShaderStageCreateInfo[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
             pipelineShaderStageCreateInfo[i].stage = VK_SHADER_STAGE_COMPUTE_BIT;
-            pipelineShaderStageCreateInfo[i].module = vulkanFFTPlan->context->shaderModule;
-            pipelineShaderStageCreateInfo[i].pName = pName;
+            pipelineShaderStageCreateInfo[i].module = vulkanFFTPlan->context->shaderModules[i];
+            pipelineShaderStageCreateInfo[i].pName = "main";
             computePipelineCreateInfo[i].sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
             computePipelineCreateInfo[i].stage = pipelineShaderStageCreateInfo[i];
             computePipelineCreateInfo[i].layout = vulkanFFTAxis->pipelineLayout;

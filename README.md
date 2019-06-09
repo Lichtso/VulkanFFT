@@ -37,7 +37,7 @@ vulkanfft -x 16 -y 16 --input png --output ascii < test.png
 - cmake 3.11
 - libpng 1.6 (optional, only needed for CLI)
 - hexdump (to inline SPIR-V in C)
-- Vulkan SDK 1.1.97 (to compile GLSL to SPIR-V)
+- Vulkan SDK 1.1.106 (to compile GLSL to SPIR-V)
 - Vulkan Runtime 1.0
 
 ## Current Features & Limitations
@@ -60,7 +60,7 @@ vulkanfft -x 16 -y 16 --input png --output ascii < test.png
     - No real only mode
     - No 8, 16, 64, 128 bit floats or integers
 - Parallelization / SIMD
-    - Only radix 2
+    - Only radix 2, 4, 8
     - No higher radix
 - Memory Requirements
     - 2*n because of swap buffers for Stockham auto-sort algorithm
@@ -68,3 +68,5 @@ vulkanfft -x 16 -y 16 --input png --output ascii < test.png
 - Memorization & Profiling
     - Only cold planning
     - No memorization or warm planning / wisdom profiling
+- Related Extras
+    - No convolution
