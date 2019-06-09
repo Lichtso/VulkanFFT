@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export VK_VERSION=1.1.101.0
+export VK_VERSION=1.1.106.0
 if [[ $TRAVIS_OS_NAME == 'osx' ]]; then
     brew install libpng
     curl -GO https://sdk.lunarg.com/sdk/download/$VK_VERSION/mac/vulkan-sdk.tar.gz
@@ -26,6 +26,6 @@ EOF
     sudo cp -R $VULKAN_SDK/include/* /usr/local/include/
     sudo cp -R $VULKAN_SDK/lib/* /usr/local/lib/
 elif [[ $TRAVIS_OS_NAME == 'windows' ]]; then
-    curl -GO https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe
-    ./vulkan-sdk.exe /S
+    curl -GO https://sdk.lunarg.com/sdk/download/$VK_VERSION/windows/vulkan-sdk.exe
+    start /wait vulkan_sdk.exe /S
 fi
