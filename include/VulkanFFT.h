@@ -1,6 +1,5 @@
 #include <vulkan/vulkan.h>
 #include <stdbool.h>
-#include <complex.h>
 #define SUPPORTED_RADIX_LEVELS 3
 
 typedef struct {

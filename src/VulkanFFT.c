@@ -216,20 +216,20 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
         const VkDescriptorType descriptorType[] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
         vulkanFFTAxis->descriptorSetLayouts = (VkDescriptorSetLayout*)malloc(sizeof(VkDescriptorSetLayout) * vulkanFFTAxis->stageCount);
         vulkanFFTAxis->descriptorSets = (VkDescriptorSet*)malloc(sizeof(VkDescriptorSet) * vulkanFFTAxis->stageCount);
-        for(uint32_t j = 0; j < vulkanFFTAxis->stageCount; ++j) {
-            VkDescriptorSetLayoutBinding descriptorSetLayoutBindings[COUNT_OF(descriptorType)];
-            for(uint32_t i = 0; i < COUNT_OF(descriptorSetLayoutBindings); ++i) {
-                descriptorSetLayoutBindings[i].binding = i;
-                descriptorSetLayoutBindings[i].descriptorType = descriptorType[i];
-                descriptorSetLayoutBindings[i].descriptorCount = 1;
-                descriptorSetLayoutBindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-            }
-            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
-            descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-            descriptorSetLayoutCreateInfo.bindingCount = COUNT_OF(descriptorSetLayoutBindings);
-            descriptorSetLayoutCreateInfo.pBindings = descriptorSetLayoutBindings;
-            assert(vkCreateDescriptorSetLayout(vulkanFFTPlan->context->device, &descriptorSetLayoutCreateInfo, vulkanFFTPlan->context->allocator, &vulkanFFTAxis->descriptorSetLayouts[j]) == VK_SUCCESS);
+        VkDescriptorSetLayoutBinding descriptorSetLayoutBindings[COUNT_OF(descriptorType)];
+        for(uint32_t i = 0; i < COUNT_OF(descriptorSetLayoutBindings); ++i) {
+            descriptorSetLayoutBindings[i].binding = i;
+            descriptorSetLayoutBindings[i].descriptorType = descriptorType[i];
+            descriptorSetLayoutBindings[i].descriptorCount = 1;
+            descriptorSetLayoutBindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         }
+        VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
+        descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        descriptorSetLayoutCreateInfo.bindingCount = COUNT_OF(descriptorSetLayoutBindings);
+        descriptorSetLayoutCreateInfo.pBindings = descriptorSetLayoutBindings;
+        assert(vkCreateDescriptorSetLayout(vulkanFFTPlan->context->device, &descriptorSetLayoutCreateInfo, vulkanFFTPlan->context->allocator, &vulkanFFTAxis->descriptorSetLayouts[0]) == VK_SUCCESS);
+        for(uint32_t j = 1; j < vulkanFFTAxis->stageCount; ++j)
+            vulkanFFTAxis->descriptorSetLayouts[j] = vulkanFFTAxis->descriptorSetLayouts[0];
         VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
         descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         descriptorSetAllocateInfo.descriptorPool = vulkanFFTAxis->descriptorPool;
@@ -287,7 +287,7 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
 
 void createVulkanFFT(VulkanFFTPlan* vulkanFFTPlan) {
     vulkanFFTPlan->resultInSwapBuffer = false;
-    vulkanFFTPlan->bufferSize = sizeof(complex float) * vulkanFFTPlan->axes[0].sampleCount * vulkanFFTPlan->axes[1].sampleCount * vulkanFFTPlan->axes[2].sampleCount;
+    vulkanFFTPlan->bufferSize = sizeof(float) * 2 * vulkanFFTPlan->axes[0].sampleCount * vulkanFFTPlan->axes[1].sampleCount * vulkanFFTPlan->axes[2].sampleCount;
     for(uint32_t i = 0; i < COUNT_OF(vulkanFFTPlan->buffer); ++i)
         createBuffer(vulkanFFTPlan->context, &vulkanFFTPlan->buffer[i], &vulkanFFTPlan->deviceMemory[i], VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_HEAP_DEVICE_LOCAL_BIT, vulkanFFTPlan->bufferSize);
     for(uint32_t i = 0; i < COUNT_OF(vulkanFFTPlan->axes); ++i)
@@ -317,8 +317,7 @@ void destroyVulkanFFT(VulkanFFTPlan* vulkanFFTPlan) {
         vkDestroyBuffer(vulkanFFTPlan->context->device, vulkanFFTAxis->ubo, vulkanFFTPlan->context->allocator);
         vkFreeMemory(vulkanFFTPlan->context->device, vulkanFFTAxis->uboDeviceMemory, vulkanFFTPlan->context->allocator);
         vkDestroyDescriptorPool(vulkanFFTPlan->context->device, vulkanFFTAxis->descriptorPool, vulkanFFTPlan->context->allocator);
-        for(uint32_t j = 0; j < vulkanFFTAxis->stageCount; ++j)
-            vkDestroyDescriptorSetLayout(vulkanFFTPlan->context->device, vulkanFFTAxis->descriptorSetLayouts[j], vulkanFFTPlan->context->allocator);
+        vkDestroyDescriptorSetLayout(vulkanFFTPlan->context->device, vulkanFFTAxis->descriptorSetLayouts[0], vulkanFFTPlan->context->allocator);
         vkDestroyPipelineLayout(vulkanFFTPlan->context->device, vulkanFFTAxis->pipelineLayout, vulkanFFTPlan->context->allocator);
         for(uint32_t j = 0; j < SUPPORTED_RADIX_LEVELS; ++j)
             vkDestroyPipeline(vulkanFFTPlan->context->device, vulkanFFTAxis->pipelines[j], vulkanFFTPlan->context->allocator);

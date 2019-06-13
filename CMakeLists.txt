@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.11)
+set(CMAKE_CXX_STANDARD 11)
 project(vulkanfft VERSION 0.0.1 DESCRIPTION "Fast Fourier Transform using the Vulkan API")
 find_package(Vulkan REQUIRED)
 
@@ -19,14 +20,20 @@ foreach(radix 2 4 8)
     add_dependencies(ObjectLibrary radix${radix}ShaderModuleTarget)
 endforeach()
 
-add_executable(CLI src/cli.c)
+add_executable(CLI src/cli.cpp)
 set_target_properties(CLI PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
 target_link_libraries(CLI SharedLibrary ${Vulkan_LIBRARIES})
 
 find_package(PNG 1.6.0)
 if(${PNG_FOUND})
-    target_compile_definitions(CLI PRIVATE PNG_FOUND)
+    target_compile_definitions(CLI PRIVATE HAS_PNG)
     target_link_libraries(CLI ${PNG_LIBRARY})
+endif()
+
+find_library(OPENEXR_ILMIMF_LIBRARY NAMES IlmImf)
+if(OPENEXR_ILMIMF_LIBRARY)
+  target_compile_definitions(CLI PRIVATE HAS_EXR)
+  target_link_libraries(CLI ${OPENEXR_ILMIMF_LIBRARY})
 endif()
 
 install(TARGETS StaticLibrary SharedLibrary

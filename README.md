@@ -1,6 +1,8 @@
-# Vulkan Fast Fourier Transform
-[![Build Status](https://api.travis-ci.org/Lichtso/VulkanFFT.svg)](https://travis-ci.org/Lichtso/VulkanFFT)
+| All | Linux | macOS | Windows |
+| --- | ----- | ----- | ------- |
+| [![Build Status](https://api.travis-ci.org/Lichtso/VulkanFFT.svg)](https://travis-ci.org/Lichtso/VulkanFFT) | [![Build Status Linux](https://travis-matrix-badges.herokuapp.com/repos/Lichtso/VulkanFFT/branches/master/1)](https://travis-ci.org/Lichtso/VulkanFFT) | [![Build Status macOS](https://travis-matrix-badges.herokuapp.com/repos/Lichtso/VulkanFFT/branches/master/2)](https://travis-ci.org/Lichtso/VulkanFFT) | [![Build Status Windows](https://travis-matrix-badges.herokuapp.com/repos/Lichtso/VulkanFFT/branches/master/3)](https://travis-ci.org/Lichtso/VulkanFFT) |
 
+# Vulkan Fast Fourier Transform
 This library can calculate a multidimensional [Discrete Fourier Transform](https://en.wikipedia.org/wiki/Discrete_Fourier_transform) on the GPU using the [Vulkan API](https://www.khronos.org/vulkan/).
 However, in most cases you probably want a different library,
 because Vulkan does not change much about the GPU computations,
@@ -22,10 +24,11 @@ For building see [Travis CI file](.travis.yml).
 - `-y height` Samples in y direction
 - `-z depth` Samples in z direction
 - `--inverse` Calculate the IDFT
-- `--input raw / ascii / png` Input encoding
-- `--output raw / ascii / png` Output encoding
+- `--input raw / ascii / png / exr` Input encoding
+- `--output raw / ascii / png / exr` Output encoding
 - `--device index` Vulkan device to use
 - `--list-devices` List Vulkan devices
+- `--measure-time` Measure time spent in setup, upload, computation, download and teardown
 
 ### Example Invocations
 ```bash
@@ -36,6 +39,7 @@ vulkanfft -x 16 -y 16 --input png --output ascii < test.png
 ## Dependencies
 - cmake 3.11
 - libpng 1.6 (optional, only needed for CLI)
+- libopenexr 2.3 (optional, only needed for CLI)
 - hexdump (to inline SPIR-V in C)
 - Vulkan SDK 1.1.106 (to compile GLSL to SPIR-V)
 - Vulkan Runtime 1.0

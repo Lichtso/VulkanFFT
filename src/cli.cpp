@@ -1,11 +1,20 @@
-#include "VulkanFFT.h"
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef PNG_FOUND
+#include <complex>
+#ifdef HAS_PNG
 #include <libpng16/png.h>
 #endif
+#ifdef HAS_EXR
+#include <OpenEXR/ImfFrameBuffer.h>
+#include <OpenEXR/ImfChannelList.h>
+#include <OpenEXR/ImfInputFile.h>
+#include <OpenEXR/ImfOutputFile.h>
+#endif
+extern "C" {
+#include "VulkanFFT.h"
+}
 #define COUNT_OF(array) (sizeof(array) / sizeof(array[0]))
 
 
@@ -14,14 +23,18 @@ typedef struct {
     uint16_t real;
 } Pixel;
 
-typedef struct {
-    enum {
-        RAW,
-        ASCII,
-#ifdef PNG_FOUND
-        PNG,
+enum IOType {
+    RAW,
+    ASCII,
+#ifdef HAS_PNG
+    PNG,
 #endif
-    } type;
+#ifdef HAS_EXR
+    EXR,
+#endif
+};
+typedef struct {
+    IOType type;
     FILE* file;
 } DataStream;
 DataStream inputStream = {ASCII}, outputStream = {ASCII};
@@ -46,12 +59,23 @@ void abortWithError(const char* message) {
     exit(1);
 }
 
+#ifdef HAS_EXR
+Imf::FrameBuffer frameBufferForEXR(float* image, uint32_t width) {
+    Imf::FrameBuffer frameBuffer;
+    uint32_t xStride = 2*sizeof(float);
+    uint32_t yStride = width*2*sizeof(float);
+    frameBuffer.insert("R", Imf::Slice(Imf::FLOAT, (char*)&image[0], xStride, yStride));
+    frameBuffer.insert("G", Imf::Slice(Imf::FLOAT, (char*)&image[1], xStride, yStride));
+    return frameBuffer;
+}
+#endif
+
 void readDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
     VulkanFFTTransfer vulkanFFTTransfer;
     vulkanFFTTransfer.context = &context;
     vulkanFFTTransfer.size = vulkanFFTPlan.bufferSize;
     vulkanFFTTransfer.deviceBuffer = vulkanFFTPlan.buffer[0];
-    complex float* data = createVulkanFFTUpload(&vulkanFFTTransfer);
+    auto data = reinterpret_cast<std::complex<float>*>(createVulkanFFTUpload(&vulkanFFTTransfer));
     switch(dataStream->type) {
         case RAW:
             assert(fread(data, 1, vulkanFFTPlan.bufferSize, dataStream->file) == vulkanFFTPlan.bufferSize);
@@ -60,10 +84,10 @@ void readDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
             for(uint32_t i = 0; i < vulkanFFTPlan.axes[0].sampleCount * vulkanFFTPlan.axes[1].sampleCount * vulkanFFTPlan.axes[2].sampleCount; ++i) {
                 float real, imag;
                 fscanf(dataStream->file, "%f %f", &real, &imag);
-                data[i] = real + imag * I;
+                data[i] = std::complex<float>(real, imag);
             }
         break;
-#ifdef PNG_FOUND
+#ifdef HAS_PNG
         case PNG: {
             png_byte pngsig[8];
             assert(fread(pngsig, 1, sizeof(pngsig), dataStream->file) == sizeof(pngsig));
@@ -72,7 +96,7 @@ void readDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
             assert(pngPtr);
             png_infop infoPtr = png_create_info_struct(pngPtr);
             assert(infoPtr);
-            png_byte** rowPtrs = malloc(sizeof(png_bytep) * vulkanFFTPlan.axes[1].sampleCount);
+            auto rowPtrs = reinterpret_cast<png_byte**>(malloc(sizeof(png_bytep) * vulkanFFTPlan.axes[1].sampleCount));
             if(setjmp(png_jmpbuf(pngPtr))) {
                 png_destroy_read_struct(&pngPtr, &infoPtr, (png_infopp)0);
                 free(rowPtrs);
@@ -102,6 +126,17 @@ void readDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
             free(rowPtrs);
         } break;
 #endif
+#ifdef HAS_EXR
+        case EXR: {
+            Imf::InputFile inputFile("/dev/stdin");
+            assert(inputFile.header().channels().findChannel("R") && inputFile.header().channels().findChannel("G"));
+            Imath::Box2i dataWindow = inputFile.header().dataWindow();
+            uint32_t width = dataWindow.max.x-dataWindow.min.x+1, height = dataWindow.max.y-dataWindow.min.y+1;
+            assert(vulkanFFTPlan.axes[0].sampleCount == width && vulkanFFTPlan.axes[1].sampleCount == height && vulkanFFTPlan.axes[2].sampleCount == 1);
+            inputFile.setFrameBuffer(frameBufferForEXR(reinterpret_cast<float*>(data), width));
+            inputFile.readPixels(dataWindow.min.y, dataWindow.max.y);
+        } break;
+#endif
     }
     freeVulkanFFTTransfer(&vulkanFFTTransfer);
 }
@@ -111,7 +146,7 @@ void writeDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
     vulkanFFTTransfer.context = &context;
     vulkanFFTTransfer.size = vulkanFFTPlan.bufferSize;
     vulkanFFTTransfer.deviceBuffer = vulkanFFTPlan.buffer[vulkanFFTPlan.resultInSwapBuffer];
-    complex float* data = createVulkanFFTDownload(&vulkanFFTTransfer);
+    auto data = reinterpret_cast<std::complex<float>*>(createVulkanFFTDownload(&vulkanFFTTransfer));
     switch(dataStream->type) {
         case RAW:
             assert(fwrite(data, 1, vulkanFFTPlan.bufferSize, dataStream->file) == vulkanFFTPlan.bufferSize);
@@ -124,18 +159,18 @@ void writeDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
                 for(uint32_t y = 0; y < vulkanFFTPlan.axes[1].sampleCount; ++y) {
                     uint32_t yzOffset = zOffset + vulkanFFTPlan.axes[0].sampleCount * y;
                     for(uint32_t x = 0; x < vulkanFFTPlan.axes[0].sampleCount; ++x)
-                        fprintf(dataStream->file, "%f %f ", crealf(data[x + yzOffset]), cimagf(data[x + yzOffset]));
+                        fprintf(dataStream->file, "%.24f %.24f ", std::real(data[x + yzOffset]), std::imag(data[x + yzOffset]));
                     fprintf(dataStream->file, "\n");
                 }
             }
             break;
-#ifdef PNG_FOUND
+#ifdef HAS_PNG
         case PNG: {
             png_structp pngPtr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
             assert(pngPtr);
             png_infop infoPtr = png_create_info_struct(pngPtr);
             assert(infoPtr);
-            png_byte** rowPtrs = malloc(sizeof(png_bytep) * vulkanFFTPlan.axes[1].sampleCount);
+            auto rowPtrs = reinterpret_cast<png_byte**>(malloc(sizeof(png_bytep) * vulkanFFTPlan.axes[1].sampleCount));
             if(setjmp(png_jmpbuf(pngPtr))) {
                 png_destroy_read_struct(&pngPtr, &infoPtr, (png_infopp)0);
                 free(rowPtrs);
@@ -149,12 +184,22 @@ void writeDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
                 Pixel* row = (Pixel*)&data[yOffset];
                 rowPtrs[y] = (png_byte*)row;
                 for(uint32_t x = 0; x < vulkanFFTPlan.axes[0].sampleCount; ++x)
-                    row[x].real = (crealf(data[x + yOffset]) + 1.0) * 32767.0;
+                    row[x].real = (std::real(data[x + yOffset]) + 1.0) * 32767.0;
             }
             png_set_swap(pngPtr);
             png_write_image(pngPtr, rowPtrs);
             png_write_end(pngPtr, NULL);
             free(rowPtrs);
+        } break;
+#endif
+#ifdef HAS_EXR
+        case EXR: {
+            Imf::Header header(vulkanFFTPlan.axes[0].sampleCount, vulkanFFTPlan.axes[1].sampleCount, 1, Imath::V2f(0, 0), vulkanFFTPlan.axes[0].sampleCount, Imf::INCREASING_Y, Imf::ZIP_COMPRESSION);
+            header.channels().insert("R", Imf::Channel(Imf::FLOAT));
+            header.channels().insert("G", Imf::Channel(Imf::FLOAT));
+            Imf::OutputFile outputFile("/dev/stdout", header);
+            outputFile.setFrameBuffer(frameBufferForEXR(reinterpret_cast<float*>(data), vulkanFFTPlan.axes[0].sampleCount));
+            outputFile.writePixels(vulkanFFTPlan.axes[1].sampleCount);
         } break;
 #endif
     }
@@ -168,7 +213,8 @@ int main(int argc, const char** argv) {
     vulkanFFTPlan.axes[2].sampleCount = 1;
     inputStream.file = stdin;
     outputStream.file = stdout;
-    bool listDevices = false;
+    bool listDevices = false,
+         measureTime = false;
     for(uint32_t i = 1; i < argc; ++i) {
         if(strcmp(argv[i], "-x") == 0) {
             assert(++i < argc);
@@ -188,15 +234,21 @@ int main(int argc, const char** argv) {
                 dataStream->type = RAW;
             else if(strcmp(argv[i], "ascii") == 0)
                 dataStream->type = ASCII;
-#ifdef PNG_FOUND
+#ifdef HAS_PNG
             else if(strcmp(argv[i], "png") == 0)
                 dataStream->type = PNG;
+#endif
+#ifdef HAS_EXR
+            else if(strcmp(argv[i], "exr") == 0)
+                dataStream->type = EXR;
 #endif
         } else if(strcmp(argv[i], "--device") == 0) {
             assert(++i < argc);
             sscanf(argv[i], "%d", &deviceIndex);
         } else if(strcmp(argv[i], "--list-devices") == 0)
             listDevices = true;
+         else if(strcmp(argv[i], "--measure-time") == 0)
+            measureTime = true;
         else
             fprintf(stderr, "Unrecognized option %s\n", argv[i]);
     }
@@ -318,12 +370,15 @@ int main(int argc, const char** argv) {
     }
 
     if(!listDevices) {
+        auto timeA = std::chrono::steady_clock::now();
         initVulkanFFTContext(&context);
         createVulkanFFT(&vulkanFFTPlan);
-        readDataStream(&inputStream, &vulkanFFTPlan);
         VkCommandBuffer commandBuffer = createCommandBuffer(&context, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
         recordVulkanFFT(&vulkanFFTPlan, commandBuffer);
         vkEndCommandBuffer(commandBuffer);
+        auto timeB = std::chrono::steady_clock::now();
+        readDataStream(&inputStream, &vulkanFFTPlan);
+        auto timeC = std::chrono::steady_clock::now();
         VkSubmitInfo submitInfo = {};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.commandBufferCount = 1;
@@ -331,9 +386,19 @@ int main(int argc, const char** argv) {
         assert(vkQueueSubmit(context.queue, 1, &submitInfo, context.fence) == VK_SUCCESS);
         assert(vkWaitForFences(context.device, 1, &context.fence, VK_TRUE, 100000000000) == VK_SUCCESS);
         assert(vkResetFences(context.device, 1, &context.fence) == VK_SUCCESS);
+        auto timeD = std::chrono::steady_clock::now();
         writeDataStream(&outputStream, &vulkanFFTPlan);
+        auto timeE = std::chrono::steady_clock::now();
         destroyVulkanFFT(&vulkanFFTPlan);
         freeVulkanFFTContext(&context);
+        auto timeF = std::chrono::steady_clock::now();
+        if(measureTime) {
+            fprintf(stderr, "Setup: %.3f ms\n", std::chrono::duration_cast<std::chrono::microseconds>(timeB-timeA).count()*0.001);
+            fprintf(stderr, "Upload: %.3f ms\n", std::chrono::duration_cast<std::chrono::microseconds>(timeC-timeB).count()*0.001);
+            fprintf(stderr, "Computation: %.3f ms\n", std::chrono::duration_cast<std::chrono::microseconds>(timeD-timeC).count()*0.001);
+            fprintf(stderr, "Download: %.3f ms\n", std::chrono::duration_cast<std::chrono::microseconds>(timeE-timeD).count()*0.001);
+            fprintf(stderr, "Teardown: %.3f ms\n", std::chrono::duration_cast<std::chrono::microseconds>(timeF-timeE).count()*0.001);
+        }
     }
 
     vkDestroyCommandPool(context.device, context.commandPool, context.allocator);
