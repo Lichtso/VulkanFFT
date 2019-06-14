@@ -52,8 +52,8 @@ vec2 perpendicularComplexNumber(vec2 w) {
     return vec2(-w.y, w.x) * ubo.directionFactor;
 }
 
-vec2 angleBisectComplexNumber(vec2 w, float k) {
-    return normalize((w + vec2(1.0, 0.0)) * k);
+vec2 angleBisectComplexNumber(vec2 w) {
+    return normalize(w + vec2(1.0, 0.0));
 }
 
 void butterfly(inout vec2 a, inout vec2 b, vec2 w) {
@@ -71,7 +71,7 @@ void fft2(inout vec2 values[2], vec2 w) {
 void fft4(inout vec2 values[4], vec2 w) {
     butterfly(values[0], values[2], w);
     butterfly(values[1], values[3], w);
-    vec2 w0 = angleBisectComplexNumber(w, 0.5);
+    vec2 w0 = angleBisectComplexNumber(w);
     vec2 w1 = perpendicularComplexNumber(w0);
     butterfly(values[0], values[1], w0);
     butterfly(values[2], values[3], w1);
@@ -83,13 +83,13 @@ void fft8(inout vec2 values[8], vec2 w) {
     butterfly(values[1], values[5], w);
     butterfly(values[2], values[6], w);
     butterfly(values[3], values[7], w);
-    vec2 w0 = angleBisectComplexNumber(w, 0.5);
-    vec2 w1 = perpendicularComplexNumber(w);
+    vec2 w0 = angleBisectComplexNumber(w);
+    vec2 w1 = perpendicularComplexNumber(w0);
     butterfly(values[0], values[2], w0);
     butterfly(values[1], values[3], w0);
     butterfly(values[4], values[6], w1);
     butterfly(values[5], values[7], w1);
-    vec2 W0 = angleBisectComplexNumber(w, 0.25);
+    vec2 W0 = angleBisectComplexNumber(w0);
     vec2 W1 = perpendicularComplexNumber(W0);
     vec2 W2 = multComplexNumbers(W0, vec2(M_SQRT1_2, M_SQRT1_2 * ubo.directionFactor));
     vec2 W3 = perpendicularComplexNumber(W2);

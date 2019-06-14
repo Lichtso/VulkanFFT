@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <complex>
+#include <chrono>
 #ifdef HAS_PNG
 #include <libpng16/png.h>
 #endif
@@ -19,9 +20,7 @@ extern "C" {
 
 
 
-typedef struct {
-    uint16_t real;
-} Pixel;
+typedef uint8_t Pixel;
 
 enum IOType {
     RAW,
@@ -111,7 +110,7 @@ void readDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
             int bitdepth, colorType;
             png_get_IHDR(pngPtr, infoPtr, &width, &height, &bitdepth, &colorType, NULL, NULL, NULL);
             assert(vulkanFFTPlan.axes[0].sampleCount == width && vulkanFFTPlan.axes[1].sampleCount == height && vulkanFFTPlan.axes[2].sampleCount == 1);
-            assert(bitdepth == 16 && colorType == PNG_COLOR_TYPE_GRAY);
+            assert(bitdepth == 8 && colorType == PNG_COLOR_TYPE_GRAY);
             for(uint32_t y = 0; y < vulkanFFTPlan.axes[1].sampleCount; ++y)
                 rowPtrs[y] = (png_byte*)&data[vulkanFFTPlan.axes[0].sampleCount * y];
             png_set_swap(pngPtr);
@@ -120,7 +119,7 @@ void readDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
                 uint32_t yOffset = vulkanFFTPlan.axes[0].sampleCount * y;
                 Pixel* row = (Pixel*)&data[yOffset];
                 for(int32_t x = vulkanFFTPlan.axes[0].sampleCount-1; x >= 0; --x)
-                    data[x + yOffset] = (row[x].real / 32767.0) - 1.0;
+                    data[x + yOffset] = (float)row[x] / 256.0;
             }
             png_read_end(pngPtr, NULL);
             free(rowPtrs);
@@ -177,14 +176,14 @@ void writeDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
                 abortWithError("Could not generate PNG output");
             }
             png_init_io(pngPtr, dataStream->file);
-            png_set_IHDR(pngPtr, infoPtr, vulkanFFTPlan.axes[0].sampleCount, vulkanFFTPlan.axes[1].sampleCount, 16, PNG_COLOR_TYPE_GRAY, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+            png_set_IHDR(pngPtr, infoPtr, vulkanFFTPlan.axes[0].sampleCount, vulkanFFTPlan.axes[1].sampleCount, 8, PNG_COLOR_TYPE_GRAY, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
             png_write_info(pngPtr, infoPtr);
             for(uint32_t y = 0; y < vulkanFFTPlan.axes[1].sampleCount; ++y) {
                 uint32_t yOffset = vulkanFFTPlan.axes[0].sampleCount * y;
                 Pixel* row = (Pixel*)&data[yOffset];
                 rowPtrs[y] = (png_byte*)row;
                 for(uint32_t x = 0; x < vulkanFFTPlan.axes[0].sampleCount; ++x)
-                    row[x].real = (std::real(data[x + yOffset]) + 1.0) * 32767.0;
+                    row[x] = std::real(data[x + yOffset]) * 256.0;
             }
             png_set_swap(pngPtr);
             png_write_image(pngPtr, rowPtrs);
