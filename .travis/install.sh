@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export VK_VERSION=1.1.106.0
+export VK_VERSION=1.2.131.2
 if [[ $TRAVIS_OS_NAME == 'osx' ]]; then
     brew install libpng openexr
     curl -GO https://sdk.lunarg.com/sdk/download/$VK_VERSION/mac/vulkan-sdk.tar.gz
@@ -8,6 +8,7 @@ if [[ $TRAVIS_OS_NAME == 'osx' ]]; then
     export VULKAN_SDK=$TRAVIS_BUILD_DIR/vulkansdk-macos-$VK_VERSION/macOS
 cat > environments.sh << EOF
 export VULKAN_SDK=$VULKAN_SDK
+export VK_TOOLS=$VULKAN_SDK/bin
 export VK_ICD_FILENAMES=$VULKAN_SDK/etc/vulkan/icd.d/MoltenVK_icd.json
 export VK_LAYER_PATH=$VULKAN_SDK/etc/vulkan/explicit_layer.d
 EOF
@@ -20,6 +21,7 @@ elif [[ $TRAVIS_OS_NAME == 'linux' ]]; then
     export VULKAN_SDK=$TRAVIS_BUILD_DIR/$VK_VERSION/x86_64
 cat > environments.sh << EOF
 export VULKAN_SDK=$VULKAN_SDK
+export VK_TOOLS=$VULKAN_SDK/bin
 export VK_ICD_FILENAMES=~/dev/mesa/share/vulkan/icd.d/intel_icd.x86_64.json
 export VK_LAYER_PATH=$VULKAN_SDK/etc/explicit_layer.d
 EOF

@@ -41,7 +41,7 @@ vulkanfft -x 16 -y 16 --input png --output ascii < test.png
 - libpng 1.6 (optional, only needed for CLI)
 - libopenexr 2.3 (optional, only needed for CLI)
 - hexdump (to inline SPIR-V in C)
-- Vulkan SDK 1.1.106 (to compile GLSL to SPIR-V)
+- Vulkan SDK 1.2.131.2 (to compile GLSL to SPIR-V)
 - Vulkan Runtime 1.0
 
 ## Current Features & Limitations

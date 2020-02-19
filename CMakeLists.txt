@@ -12,7 +12,7 @@ set_target_properties(StaticLibrary SharedLibrary PROPERTIES OUTPUT_NAME ${PROJE
 target_link_libraries(SharedLibrary ${Vulkan_LIBRARIES})
 foreach(radix 2 4 8)
     add_custom_command(OUTPUT radix${radix}.hex
-        COMMAND ${VULKAN_SDK}/bin/glslangValidator -V -Os -DRADIX=${radix} -o radix${radix}.spv ${CMAKE_SOURCE_DIR}/src/fft.comp
+        COMMAND ${VK_TOOLS}/glslangValidator -V -Os -DRADIX=${radix} -o radix${radix}.spv ${CMAKE_SOURCE_DIR}/src/fft.comp
         COMMAND hexdump -v -e '/4 \"0x%08X, \"' radix${radix}.spv > radix${radix}.hex
         DEPENDS ${CMAKE_SOURCE_DIR}/src/fft.comp
     )
