@@ -6,6 +6,7 @@ matrix:
         - os: linux
           dist: xenial
         - os: osx
+          osx_image: xcode10.3
         - os: windows
 
 compiler:
@@ -17,5 +18,17 @@ install:
 script:
     - source environments.sh
     - mkdir -p build && cd build
-    - cmake .. -DVULKAN_SDK=$VULKAN_SDK
+    - cmake .. -DVK_TOOLS=$VK_TOOLS
     - make
+
+before_deploy:
+    - cd build
+    - zip $TRAVIS_OS_NAME.zip libvulkanfft* vulkanfft*
+
+deploy:
+    provider: releases
+    api_key: $GITHUB_TOKEN
+    file: build/$TRAVIS_OS_NAME.zip
+    skip_cleanup: true
+    on:
+        tags: true

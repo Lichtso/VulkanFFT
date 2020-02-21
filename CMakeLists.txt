@@ -4,7 +4,7 @@ project(vulkanfft VERSION 0.0.1 DESCRIPTION "Fast Fourier Transform using the Vu
 find_package(Vulkan REQUIRED)
 
 add_library(ObjectLibrary OBJECT src/VulkanFFT.c)
-include_directories(ObjectLibrary PRIVATE include ${CMAKE_BINARY_DIR})
+include_directories(ObjectLibrary PRIVATE include ${CMAKE_BINARY_DIR} ${Vulkan_INCLUDE_DIR})
 set_property(TARGET ObjectLibrary PROPERTY POSITION_INDEPENDENT_CODE ON)
 add_library(StaticLibrary STATIC $<TARGET_OBJECTS:ObjectLibrary>)
 add_library(SharedLibrary SHARED $<TARGET_OBJECTS:ObjectLibrary>)
@@ -28,12 +28,14 @@ find_package(PNG 1.6.0)
 if(${PNG_FOUND})
     target_compile_definitions(CLI PRIVATE HAS_PNG)
     target_link_libraries(CLI ${PNG_LIBRARY})
+    include_directories(ObjectLibrary PRIVATE include ${PNG_INCLUDE_DIR})
 endif()
 
 find_library(OPENEXR_ILMIMF_LIBRARY NAMES IlmImf)
 if(OPENEXR_ILMIMF_LIBRARY)
   target_compile_definitions(CLI PRIVATE HAS_EXR)
   target_link_libraries(CLI ${OPENEXR_ILMIMF_LIBRARY})
+  include_directories(ObjectLibrary PRIVATE include ${OPENEXR_INCLUDE_DIR})
 endif()
 
 install(TARGETS StaticLibrary SharedLibrary
@@ -41,4 +43,4 @@ install(TARGETS StaticLibrary SharedLibrary
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
 )
-install(DIRECTORY include/ DESTINATION include) # include/${PROJECT_NAME}
+install(DIRECTORY include/ DESTINATION include)
