@@ -31,8 +31,8 @@ elif [[ $TRAVIS_OS_NAME == 'windows' ]]; then
     curl -Go vulkan-sdk.exe https://sdk.lunarg.com/sdk/download/$VK_VERSION/windows/vulkan-sdk.exe?human=true
     7z x vulkan-sdk.exe
     export VULKAN_SDK=$TRAVIS_BUILD_DIR
-    setx -m VULKAN_SDK $VULKAN_SDK
-    type > environments.sh << EOF
+    cat > environments.sh << EOF
+export VULKAN_SDK=$VULKAN_SDK
 export VK_TOOLS=$VULKAN_SDK/Bin
 export VK_ICD_FILENAMES=/windows/system32/nv-vk64.json
 export VK_LAYER_PATH=$VULKAN_SDK/Bin

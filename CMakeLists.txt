@@ -13,7 +13,7 @@ target_link_libraries(SharedLibrary ${Vulkan_LIBRARIES})
 foreach(radix 2 4 8)
     add_custom_command(OUTPUT radix${radix}.hex
         COMMAND ${VK_TOOLS}/glslangValidator -V -Os -DRADIX=${radix} -o radix${radix}.spv ${CMAKE_SOURCE_DIR}/src/fft.comp
-        COMMAND hexdump -v -e '/4 \"0x%08X, \"' radix${radix}.spv > radix${radix}.hex
+        COMMAND xxd -i radix${radix}.spv > radix${radix}.h
         DEPENDS ${CMAKE_SOURCE_DIR}/src/fft.comp
     )
     add_custom_target(radix${radix}ShaderModuleTarget DEPENDS radix${radix}.hex)
@@ -22,7 +22,7 @@ endforeach()
 
 add_executable(CLI src/cli.cpp)
 set_target_properties(CLI PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
-target_link_libraries(CLI SharedLibrary ${Vulkan_LIBRARIES})
+target_link_libraries(CLI StaticLibrary ${Vulkan_LIBRARIES})
 
 find_package(PNG 1.6.0)
 if(${PNG_FOUND})

@@ -13,6 +13,10 @@
 #include <OpenEXR/ImfInputFile.h>
 #include <OpenEXR/ImfOutputFile.h>
 #endif
+#ifdef WIN32
+#define fscanf fscanf_s
+#define sscanf sscanf_s
+#endif
 extern "C" {
 #include "VulkanFFT.h"
 }
@@ -77,7 +81,7 @@ void readDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
     auto data = reinterpret_cast<std::complex<float>*>(createVulkanFFTUpload(&vulkanFFTTransfer));
     switch(dataStream->type) {
         case RAW:
-            assert(fread(data, 1, vulkanFFTPlan.bufferSize, dataStream->file) == vulkanFFTPlan.bufferSize);
+            assert(fread(data, 1, (size_t)vulkanFFTPlan.bufferSize, dataStream->file) == vulkanFFTPlan.bufferSize);
             break;
         case ASCII:
             for(uint32_t i = 0; i < vulkanFFTPlan.axes[0].sampleCount * vulkanFFTPlan.axes[1].sampleCount * vulkanFFTPlan.axes[2].sampleCount; ++i) {
@@ -148,7 +152,7 @@ void writeDataStream(DataStream* dataStream, VulkanFFTPlan* vulkanFFT) {
     auto data = reinterpret_cast<std::complex<float>*>(createVulkanFFTDownload(&vulkanFFTTransfer));
     switch(dataStream->type) {
         case RAW:
-            assert(fwrite(data, 1, vulkanFFTPlan.bufferSize, dataStream->file) == vulkanFFTPlan.bufferSize);
+            assert(fwrite(data, 1, (size_t)vulkanFFTPlan.bufferSize, dataStream->file) == vulkanFFTPlan.bufferSize);
             break;
         case ASCII:
             for(uint32_t z = 0; z < vulkanFFTPlan.axes[2].sampleCount; ++z) {
@@ -214,7 +218,7 @@ int main(int argc, const char** argv) {
     outputStream.file = stdout;
     bool listDevices = false,
          measureTime = false;
-    for(uint32_t i = 1; i < argc; ++i) {
+    for(int i = 1; i < argc; ++i) {
         if(strcmp(argv[i], "-x") == 0) {
             assert(++i < argc);
             sscanf(argv[i], "%d", &vulkanFFTPlan.axes[0].sampleCount);
@@ -267,7 +271,7 @@ int main(int argc, const char** argv) {
         assert(vkEnumerateInstanceLayerProperties(&instanceLayerCount, NULL) == VK_SUCCESS);
         if(instanceLayerCount == 0)
             abortWithError("No layers found: Is VK_LAYER_PATH set correctly?");
-        VkLayerProperties instanceLayers[instanceLayerCount];
+        VkLayerProperties* instanceLayers = new VkLayerProperties[instanceLayerCount];
         assert(vkEnumerateInstanceLayerProperties(&instanceLayerCount, instanceLayers) == VK_SUCCESS);
         for(uint32_t i = 0; i < COUNT_OF(requiredLayers); ++i) {
             bool found = false;
@@ -281,9 +285,10 @@ int main(int argc, const char** argv) {
                 exit(1);
             }
         }
+        delete[] instanceLayers;
         uint32_t extensionCount;
         vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, NULL);
-        VkExtensionProperties extensions[extensionCount];
+        VkExtensionProperties* extensions = new VkExtensionProperties[extensionCount];
         vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, extensions);
         for(uint32_t i = 0; i < COUNT_OF(requiredExtensions); ++i) {
             bool found = false;
@@ -297,6 +302,7 @@ int main(int argc, const char** argv) {
                 exit(1);
             }
         }
+        delete[] extensions;
         VkInstanceCreateInfo instanceCreateInfo = {};
         instanceCreateInfo.enabledLayerCount = COUNT_OF(requiredLayers);
         instanceCreateInfo.ppEnabledLayerNames = requiredLayers;
@@ -329,9 +335,9 @@ int main(int argc, const char** argv) {
             abortWithError("No devices found");
         if(deviceIndex >= physicalDeviceCount)
             abortWithError("Device index too high");
-        VkPhysicalDevice physicalDevices[physicalDeviceCount];
+        VkPhysicalDevice* physicalDevices = new VkPhysicalDevice[physicalDeviceCount];
         vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices);
-        for(int i = 0; i < physicalDeviceCount; ++i) {
+        for(uint32_t i = 0; i < physicalDeviceCount; ++i) {
             VkPhysicalDeviceProperties deviceProperties;
             vkGetPhysicalDeviceProperties(physicalDevices[i], &deviceProperties);
             if(listDevices)
@@ -340,10 +346,12 @@ int main(int argc, const char** argv) {
             vkGetPhysicalDeviceFeatures(physicalDevices[i], &deviceFeatures);
             uint32_t queueFamilyCount = 0;
             vkGetPhysicalDeviceQueueFamilyProperties(physicalDevices[i], &queueFamilyCount, NULL);
-            VkQueueFamilyProperties queueFamilies[queueFamilyCount];
+            VkQueueFamilyProperties* queueFamilies = new VkQueueFamilyProperties[queueFamilyCount];
             vkGetPhysicalDeviceQueueFamilyProperties(physicalDevices[i], &queueFamilyCount, queueFamilies);
+            delete[] queueFamilies;
         }
         context.physicalDevice = physicalDevices[deviceIndex];
+        delete[] physicalDevices;
 
         VkDeviceQueueCreateInfo deviceQueueCreateInfo = {};
         deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;

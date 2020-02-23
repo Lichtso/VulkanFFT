@@ -16,10 +16,7 @@ install:
     - .travis/install.sh
 
 script:
-    - source environments.sh
-    - mkdir -p build && cd build
-    - cmake .. -DVK_TOOLS=$VK_TOOLS
-    - make
+    - .travis/build.sh
 
 before_deploy:
     - cd build

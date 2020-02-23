@@ -1,33 +1,32 @@
 #include "VulkanFFT.h"
 #include <stdlib.h>
 #include <assert.h>
-#include <math.h>
 #define COUNT_OF(array) (sizeof(array) / sizeof(array[0]))
 
-const uint32_t radix2ShaderModule[] = {
-#include "radix2.hex"
-};
-const uint32_t radix4ShaderModule[] = {
-#include "radix4.hex"
-};
-const uint32_t radix8ShaderModule[] = {
-#include "radix8.hex"
-};
+#ifdef WIN32
+#define __builtin_clz __lzcnt
+#define _USE_MATH_DEFINES
+#endif
+#include <math.h>
+
+#include "radix2.h"
+#include "radix4.h"
+#include "radix8.h"
 const uint32_t* shaderModuleCode[] = {
-    radix2ShaderModule,
-    radix4ShaderModule,
-    radix8ShaderModule
+    (uint32_t*)radix2_spv,
+    (uint32_t*)radix4_spv,
+    (uint32_t*)radix8_spv
 };
 const uint32_t shaderModuleSize[] = {
-    sizeof(radix2ShaderModule),
-    sizeof(radix4ShaderModule),
-    sizeof(radix8ShaderModule)
+    sizeof(radix2_spv),
+    sizeof(radix4_spv),
+    sizeof(radix8_spv)
 };
 
 void initVulkanFFTContext(VulkanFFTContext* context) {
     vkGetPhysicalDeviceProperties(context->physicalDevice, &context->physicalDeviceProperties);
     vkGetPhysicalDeviceMemoryProperties(context->physicalDevice, &context->physicalDeviceMemoryProperties);
-    VkFenceCreateInfo fenceCreateInfo = {};
+    VkFenceCreateInfo fenceCreateInfo = {0};
     fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceCreateInfo.flags = 0;
     assert(vkCreateFence(context->device, &fenceCreateInfo, context->allocator, &context->fence) == VK_SUCCESS);
@@ -45,7 +44,7 @@ void freeVulkanFFTContext(VulkanFFTContext* context) {
 
 
 VkShaderModule loadShaderModule(VulkanFFTContext* context, const uint32_t* code, size_t codeSize) {
-    VkShaderModuleCreateInfo shaderModuleCreateInfo = {};
+    VkShaderModuleCreateInfo shaderModuleCreateInfo = {0};
     shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     shaderModuleCreateInfo.codeSize = codeSize;
     shaderModuleCreateInfo.pCode = code;
@@ -63,7 +62,7 @@ uint32_t findMemoryType(VulkanFFTContext* context, uint32_t typeFilter, VkMemory
 
 void createBuffer(VulkanFFTContext* context, VkBuffer* buffer, VkDeviceMemory* deviceMemory, VkBufferUsageFlags usage, VkMemoryPropertyFlags propertyFlags, VkDeviceSize size) {
     uint32_t queueFamilyIndices[1] = {0};
-    VkBufferCreateInfo bufferCreateInfo = {};
+    VkBufferCreateInfo bufferCreateInfo = {0};
     bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     bufferCreateInfo.queueFamilyIndexCount = COUNT_OF(queueFamilyIndices);
@@ -73,7 +72,7 @@ void createBuffer(VulkanFFTContext* context, VkBuffer* buffer, VkDeviceMemory* d
     assert(vkCreateBuffer(context->device, &bufferCreateInfo, context->allocator, buffer) == VK_SUCCESS);
     VkMemoryRequirements memoryRequirements;
     vkGetBufferMemoryRequirements(context->device, *buffer, &memoryRequirements);
-    VkMemoryAllocateInfo memoryAllocateInfo = {};
+    VkMemoryAllocateInfo memoryAllocateInfo = {0};
     memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocateInfo.allocationSize = memoryRequirements.size;
     memoryAllocateInfo.memoryTypeIndex = findMemoryType(context, memoryRequirements.memoryTypeBits, propertyFlags);
@@ -82,14 +81,14 @@ void createBuffer(VulkanFFTContext* context, VkBuffer* buffer, VkDeviceMemory* d
 }
 
 VkCommandBuffer createCommandBuffer(VulkanFFTContext* context, VkCommandBufferUsageFlags usageFlags) {
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {0};
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     commandBufferAllocateInfo.commandPool = context->commandPool;
     commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     commandBufferAllocateInfo.commandBufferCount = 1;
     VkCommandBuffer commandBuffer;
     assert(vkAllocateCommandBuffers(context->device, &commandBufferAllocateInfo, &commandBuffer) == VK_SUCCESS);
-    VkCommandBufferBeginInfo commandBufferBeginInfo = {};
+    VkCommandBufferBeginInfo commandBufferBeginInfo = {0};
     commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     commandBufferBeginInfo.flags = usageFlags;
     assert(vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo) == VK_SUCCESS);
@@ -100,13 +99,13 @@ VkCommandBuffer createCommandBuffer(VulkanFFTContext* context, VkCommandBufferUs
 
 void bufferTransfer(VulkanFFTContext* context, VkBuffer dstBuffer, VkBuffer srcBuffer, VkDeviceSize size) {
     VkCommandBuffer commandBuffer = createCommandBuffer(context, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-    VkBufferCopy copyRegion = {};
+    VkBufferCopy copyRegion = {0};
     copyRegion.srcOffset = 0;
     copyRegion.dstOffset = 0;
     copyRegion.size = size;
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
     vkEndCommandBuffer(commandBuffer);
-    VkSubmitInfo submitInfo = {};
+    VkSubmitInfo submitInfo = {0};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
@@ -156,7 +155,7 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
     VulkanFFTAxis* vulkanFFTAxis = &vulkanFFTPlan->axes[axis];
 
     {
-        vulkanFFTAxis->stageCount = __builtin_ctz(vulkanFFTAxis->sampleCount); // Logarithm of base 2
+        vulkanFFTAxis->stageCount = 31-__builtin_clz(vulkanFFTAxis->sampleCount); // Logarithm of base 2
         vulkanFFTAxis->stageRadix = (uint32_t*)malloc(sizeof(uint32_t) * vulkanFFTAxis->stageCount);
         uint32_t stageSize = vulkanFFTAxis->sampleCount;
         vulkanFFTAxis->stageCount = 0;
@@ -190,21 +189,21 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
             uboFrame->stride[2] = strides[remap[axis][2]];
             uboFrame->radixStride = vulkanFFTAxis->sampleCount / vulkanFFTAxis->stageRadix[j];
             uboFrame->stageSize = stageSize;
-            uboFrame->directionFactor = (vulkanFFTPlan->inverse) ? -1.0 : 1.0;
-            uboFrame->angleFactor = uboFrame->directionFactor * M_PI / (float)uboFrame->stageSize;
-            uboFrame->normalizationFactor = (vulkanFFTPlan->inverse) ? 1.0 : 1.0 / vulkanFFTAxis->stageRadix[j];
+            uboFrame->directionFactor = (vulkanFFTPlan->inverse) ? -1.0F : 1.0F;
+            uboFrame->angleFactor = uboFrame->directionFactor * (float) (M_PI / uboFrame->stageSize);
+            uboFrame->normalizationFactor = (vulkanFFTPlan->inverse) ? 1.0F : 1.0F / vulkanFFTAxis->stageRadix[j];
             stageSize *= vulkanFFTAxis->stageRadix[j];
         }
         freeVulkanFFTTransfer(&vulkanFFTTransfer);
     }
 
     {
-        VkDescriptorPoolSize descriptorPoolSize[2] = {};
+        VkDescriptorPoolSize descriptorPoolSize[2] = {0};
         descriptorPoolSize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descriptorPoolSize[0].descriptorCount = vulkanFFTAxis->stageCount;
         descriptorPoolSize[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         descriptorPoolSize[1].descriptorCount = vulkanFFTAxis->stageCount*2;
-        VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
+        VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {0};
         descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         descriptorPoolCreateInfo.poolSizeCount = COUNT_OF(descriptorPoolSize);
         descriptorPoolCreateInfo.pPoolSizes = descriptorPoolSize;
@@ -223,14 +222,14 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
             descriptorSetLayoutBindings[i].descriptorCount = 1;
             descriptorSetLayoutBindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         }
-        VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
+        VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {0};
         descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         descriptorSetLayoutCreateInfo.bindingCount = COUNT_OF(descriptorSetLayoutBindings);
         descriptorSetLayoutCreateInfo.pBindings = descriptorSetLayoutBindings;
         assert(vkCreateDescriptorSetLayout(vulkanFFTPlan->context->device, &descriptorSetLayoutCreateInfo, vulkanFFTPlan->context->allocator, &vulkanFFTAxis->descriptorSetLayouts[0]) == VK_SUCCESS);
         for(uint32_t j = 1; j < vulkanFFTAxis->stageCount; ++j)
             vulkanFFTAxis->descriptorSetLayouts[j] = vulkanFFTAxis->descriptorSetLayouts[0];
-        VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
+        VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {0};
         descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         descriptorSetAllocateInfo.descriptorPool = vulkanFFTAxis->descriptorPool;
         descriptorSetAllocateInfo.descriptorSetCount = vulkanFFTAxis->stageCount;
@@ -238,7 +237,7 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
         assert(vkAllocateDescriptorSets(vulkanFFTPlan->context->device, &descriptorSetAllocateInfo, vulkanFFTAxis->descriptorSets) == VK_SUCCESS);
         for(uint32_t j = 0; j < vulkanFFTAxis->stageCount; ++j)
             for(uint32_t i = 0; i < COUNT_OF(descriptorType); ++i) {
-                VkDescriptorBufferInfo descriptorBufferInfo = {};
+                VkDescriptorBufferInfo descriptorBufferInfo = {0};
                 if(i == 0) {
                     descriptorBufferInfo.buffer = vulkanFFTAxis->ubo;
                     descriptorBufferInfo.offset = vulkanFFTPlan->context->uboAlignment * j;
@@ -248,7 +247,7 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
                     descriptorBufferInfo.offset = 0;
                     descriptorBufferInfo.range = vulkanFFTPlan->bufferSize;
                 }
-                VkWriteDescriptorSet writeDescriptorSet = {};
+                VkWriteDescriptorSet writeDescriptorSet = {0};
                 writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
                 writeDescriptorSet.dstSet = vulkanFFTAxis->descriptorSets[j];
                 writeDescriptorSet.dstBinding = i;
@@ -262,13 +261,13 @@ void planVulkanFFTAxis(VulkanFFTPlan* vulkanFFTPlan, uint32_t axis) {
 
     {
         vulkanFFTAxis->pipelines = (VkPipeline*)malloc(sizeof(VkPipeline) * SUPPORTED_RADIX_LEVELS);
-        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
+        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {0};
         pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutCreateInfo.setLayoutCount = vulkanFFTAxis->stageCount;
         pipelineLayoutCreateInfo.pSetLayouts = vulkanFFTAxis->descriptorSetLayouts;
         assert(vkCreatePipelineLayout(vulkanFFTPlan->context->device, &pipelineLayoutCreateInfo, vulkanFFTPlan->context->allocator, &vulkanFFTAxis->pipelineLayout) == VK_SUCCESS);
-        VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo[SUPPORTED_RADIX_LEVELS] = {};
-        VkComputePipelineCreateInfo computePipelineCreateInfo[SUPPORTED_RADIX_LEVELS] = {};
+        VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo[SUPPORTED_RADIX_LEVELS] = {0};
+        VkComputePipelineCreateInfo computePipelineCreateInfo[SUPPORTED_RADIX_LEVELS] = {0};
         for(uint32_t i = 0; i < SUPPORTED_RADIX_LEVELS; ++i) {
             pipelineShaderStageCreateInfo[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
             pipelineShaderStageCreateInfo[i].stage = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -302,7 +301,7 @@ void recordVulkanFFT(VulkanFFTPlan* vulkanFFTPlan, VkCommandBuffer commandBuffer
             continue;
         VulkanFFTAxis* vulkanFFTAxis = &vulkanFFTPlan->axes[i];
         for(uint32_t j = 0; j < vulkanFFTAxis->stageCount; ++j) {
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkanFFTAxis->pipelines[__builtin_ctz(vulkanFFTAxis->stageRadix[j])-1]);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkanFFTAxis->pipelines[30-__builtin_clz(vulkanFFTAxis->stageRadix[j])]);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkanFFTAxis->pipelineLayout, 0, 1, &vulkanFFTAxis->descriptorSets[j], 0, NULL);
             vkCmdDispatch(commandBuffer, vulkanFFTAxis->sampleCount / vulkanFFTAxis->stageRadix[j], vulkanFFTPlan->axes[remap[i][1]].sampleCount, vulkanFFTPlan->axes[remap[i][2]].sampleCount);
         }

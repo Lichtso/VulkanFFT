@@ -12,7 +12,7 @@ typedef struct {
     VkCommandPool commandPool;
     VkFence fence;
     VkShaderModule shaderModules[SUPPORTED_RADIX_LEVELS];
-    uint32_t uboAlignment;
+    VkDeviceSize uboAlignment;
 } VulkanFFTContext;
 
 void initVulkanFFTContext(VulkanFFTContext* context);
