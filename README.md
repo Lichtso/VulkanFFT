@@ -17,7 +17,7 @@ Some reasons to use this library anyway are:
 ## Command Line Interface
 Note that many small invocations are very inefficient, because the startup costs of Vulkan are very high.
 So the CLI is only useful for transforming big data sets and testing.
-For building see [Travis CI file](.travis.yml).
+Also, only the library is supported on windows, not the CLI.
 
 ### Options
 - `-x width` Samples in x direction
@@ -38,11 +38,11 @@ vulkanfft -x 16 -y 16 --input png --output ascii < test.png
 
 ## Dependencies
 - cmake 3.11
+- Vulkan Runtime 1.0
+- Vulkan SDK 1.2.131.2 (to compile GLSL to SPIR-V)
+- xxd (to inline SPIR-V in C)
 - libpng 1.6 (optional, only needed for CLI)
 - libopenexr 2.3 (optional, only needed for CLI)
-- hexdump (to inline SPIR-V in C)
-- Vulkan SDK 1.2.131.2 (to compile GLSL to SPIR-V)
-- Vulkan Runtime 1.0
 
 ## Current Features & Limitations
 - Dimensions
