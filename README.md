@@ -39,10 +39,10 @@ vulkanfft -x 16 -y 16 --input png --output ascii < test.png
 ## Dependencies
 - cmake 3.11
 - Vulkan Runtime 1.0
-- Vulkan SDK 1.2.131.2 (to compile GLSL to SPIR-V)
+- Vulkan SDK 1.2.141.2 (to compile GLSL to SPIR-V)
 - xxd (to inline SPIR-V in C)
-- libpng 1.6 (optional, only needed for CLI)
-- libopenexr 2.3 (optional, only needed for CLI)
+- libpng 1.6.0 (optional, only needed for CLI)
+- libopenexr 2.5.2 (optional, only needed for CLI)
 
 ## Current Features & Limitations
 - Dimensions

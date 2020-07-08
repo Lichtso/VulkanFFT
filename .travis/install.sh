@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export VK_VERSION=1.2.131.2
+export VK_VERSION=1.2.141.2
 if [[ $TRAVIS_OS_NAME == 'osx' ]]; then
     brew install libpng openexr
     curl -Go vulkan-sdk.tar.gz https://sdk.lunarg.com/sdk/download/$VK_VERSION/mac/vulkan-sdk.tar.gz?human=true
@@ -9,7 +9,7 @@ if [[ $TRAVIS_OS_NAME == 'osx' ]]; then
     sudo cp -R $VULKAN_SDK/Frameworks/* /Library/Frameworks/
     cat > environments.sh << EOF
 export VULKAN_SDK=$VULKAN_SDK
-export VK_TOOLS=$VULKAN_SDK/bin
+export VK_TOOLS=$VULKAN_SDK/bin/
 export VK_ICD_FILENAMES=$VULKAN_SDK/etc/vulkan/icd.d/MoltenVK_icd.json
 export VK_LAYER_PATH=$VULKAN_SDK/etc/vulkan/explicit_layer.d
 EOF
@@ -23,7 +23,7 @@ elif [[ $TRAVIS_OS_NAME == 'linux' ]]; then
     sudo cp -R $VULKAN_SDK/lib/* /usr/local/lib/
     cat > environments.sh << EOF
 export VULKAN_SDK=$VULKAN_SDK
-export VK_TOOLS=$VULKAN_SDK/bin
+export VK_TOOLS=$VULKAN_SDK/bin/
 export VK_ICD_FILENAMES=~/dev/mesa/share/vulkan/icd.d/intel_icd.x86_64.json
 export VK_LAYER_PATH=$VULKAN_SDK/etc/explicit_layer.d
 EOF
@@ -33,7 +33,7 @@ elif [[ $TRAVIS_OS_NAME == 'windows' ]]; then
     export VULKAN_SDK=$TRAVIS_BUILD_DIR
     cat > environments.sh << EOF
 export VULKAN_SDK=$VULKAN_SDK
-export VK_TOOLS=$VULKAN_SDK/Bin
+export VK_TOOLS=$VULKAN_SDK/Bin/
 export VK_ICD_FILENAMES=/windows/system32/nv-vk64.json
 export VK_LAYER_PATH=$VULKAN_SDK/Bin
 EOF

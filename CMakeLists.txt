@@ -12,7 +12,7 @@ set_target_properties(StaticLibrary SharedLibrary PROPERTIES OUTPUT_NAME ${PROJE
 target_link_libraries(SharedLibrary ${Vulkan_LIBRARIES})
 foreach(radix 2 4 8)
     add_custom_command(OUTPUT radix${radix}.hex
-        COMMAND ${VK_TOOLS}/glslangValidator -V -Os -DRADIX=${radix} -o radix${radix}.spv ${CMAKE_SOURCE_DIR}/src/fft.comp
+        COMMAND ${VK_TOOLS}glslangValidator -V -Os -DRADIX=${radix} -o radix${radix}.spv ${CMAKE_SOURCE_DIR}/src/fft.comp
         COMMAND xxd -i radix${radix}.spv > radix${radix}.h
         DEPENDS ${CMAKE_SOURCE_DIR}/src/fft.comp
     )
@@ -31,8 +31,9 @@ if(${PNG_FOUND})
     include_directories(ObjectLibrary PRIVATE include ${PNG_INCLUDE_DIR})
 endif()
 
-find_library(OPENEXR_ILMIMF_LIBRARY NAMES IlmImf)
-if(OPENEXR_ILMIMF_LIBRARY)
+find_package(OPENEXR 2.5.2)
+if(${OPENEXR_FOUND})
+  find_library(OPENEXR_ILMIMF_LIBRARY NAMES IlmImf)
   target_compile_definitions(CLI PRIVATE HAS_EXR)
   target_link_libraries(CLI ${OPENEXR_ILMIMF_LIBRARY})
   include_directories(ObjectLibrary PRIVATE include ${OPENEXR_INCLUDE_DIR})

@@ -259,7 +259,7 @@ int main(int argc, const char** argv) {
     {
         const char* requiredLayers[] = {
             #ifndef NDEBUG
-            "VK_LAYER_LUNARG_standard_validation"
+            "VK_LAYER_KHRONOS_validation"
             #endif
         };
         const char* requiredExtensions[] = {
