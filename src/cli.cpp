@@ -267,9 +267,9 @@ int main(int argc, const char** argv) {
             VK_EXT_DEBUG_UTILS_EXTENSION_NAME
             #endif
         };
-        uint32_t instanceLayerCount;
+        uint32_t instanceLayerCount = 0;
         assert(vkEnumerateInstanceLayerProperties(&instanceLayerCount, NULL) == VK_SUCCESS);
-        if(instanceLayerCount == 0)
+        if(instanceLayerCount < COUNT_OF(requiredLayers))
             abortWithError("No layers found: Is VK_LAYER_PATH set correctly?");
         VkLayerProperties* instanceLayers = new VkLayerProperties[instanceLayerCount];
         assert(vkEnumerateInstanceLayerProperties(&instanceLayerCount, instanceLayers) == VK_SUCCESS);
@@ -286,7 +286,7 @@ int main(int argc, const char** argv) {
             }
         }
         delete[] instanceLayers;
-        uint32_t extensionCount;
+        uint32_t extensionCount = 0;
         vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, NULL);
         VkExtensionProperties* extensions = new VkExtensionProperties[extensionCount];
         vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, extensions);
