@@ -22,6 +22,7 @@ const uint32_t shaderModuleSize[] = {
     sizeof(radix4_spv),
     sizeof(radix8_spv)
 };
+const uint32_t workGroupSize = 32;
 
 void initVulkanFFTContext(VulkanFFTContext* context) {
     vkGetPhysicalDeviceProperties(context->physicalDevice, &context->physicalDeviceProperties);
@@ -301,9 +302,12 @@ void recordVulkanFFT(VulkanFFTPlan* vulkanFFTPlan, VkCommandBuffer commandBuffer
             continue;
         VulkanFFTAxis* vulkanFFTAxis = &vulkanFFTPlan->axes[i];
         for(uint32_t j = 0; j < vulkanFFTAxis->stageCount; ++j) {
+            uint32_t workGroupCount = vulkanFFTAxis->sampleCount / (vulkanFFTAxis->stageRadix[j] * workGroupSize);
+            if(workGroupCount == 0)
+                workGroupCount = 1;
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkanFFTAxis->pipelines[30-__builtin_clz(vulkanFFTAxis->stageRadix[j])]);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkanFFTAxis->pipelineLayout, 0, 1, &vulkanFFTAxis->descriptorSets[j], 0, NULL);
-            vkCmdDispatch(commandBuffer, vulkanFFTAxis->sampleCount / vulkanFFTAxis->stageRadix[j], vulkanFFTPlan->axes[remap[i][1]].sampleCount, vulkanFFTPlan->axes[remap[i][2]].sampleCount);
+            vkCmdDispatch(commandBuffer, workGroupCount, vulkanFFTPlan->axes[remap[i][1]].sampleCount, vulkanFFTPlan->axes[remap[i][2]].sampleCount);
         }
     }
 }

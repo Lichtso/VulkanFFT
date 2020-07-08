@@ -5,7 +5,7 @@
 const float M_PI = radians(180); // #define M_PI 3.14159265358979323846
 const float M_SQRT1_2 = 1.0 / sqrt(2.0); // #define M_SQRT1_2 0.707106781186547524401
 
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 layout(binding = 0) uniform UBO {
     uvec3 stride;
