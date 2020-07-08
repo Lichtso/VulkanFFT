@@ -296,6 +296,17 @@ void createVulkanFFT(VulkanFFTPlan* vulkanFFTPlan) {
 }
 
 void recordVulkanFFT(VulkanFFTPlan* vulkanFFTPlan, VkCommandBuffer commandBuffer) {
+    VkBufferMemoryBarrier bufferMemoryBarriers[2] = {0};
+    for(uint32_t i = 0; i < COUNT_OF(bufferMemoryBarriers); ++i) {
+        bufferMemoryBarriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        bufferMemoryBarriers[i].srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+        bufferMemoryBarriers[i].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+        bufferMemoryBarriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        bufferMemoryBarriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        bufferMemoryBarriers[i].buffer = vulkanFFTPlan->buffer[1-i];
+        bufferMemoryBarriers[i].offset = 0;
+        bufferMemoryBarriers[i].size = VK_WHOLE_SIZE;
+    }
     const uint32_t remap[3][3] = {{0, 1, 2}, {1, 2, 0}, {2, 0, 1}};
     for(uint32_t i = 0; i < COUNT_OF(vulkanFFTPlan->axes); ++i) {
         if(vulkanFFTPlan->axes[i].sampleCount <= 1)
@@ -308,6 +319,7 @@ void recordVulkanFFT(VulkanFFTPlan* vulkanFFTPlan, VkCommandBuffer commandBuffer
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkanFFTAxis->pipelines[30-__builtin_clz(vulkanFFTAxis->stageRadix[j])]);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkanFFTAxis->pipelineLayout, 0, 1, &vulkanFFTAxis->descriptorSets[j], 0, NULL);
             vkCmdDispatch(commandBuffer, workGroupCount, vulkanFFTPlan->axes[remap[i][1]].sampleCount, vulkanFFTPlan->axes[remap[i][2]].sampleCount);
+            vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, NULL, COUNT_OF(bufferMemoryBarriers), bufferMemoryBarriers, 0, NULL);
         }
     }
 }
