@@ -1,11 +1,12 @@
 #!/bin/bash
 
 export VK_VERSION=1.2.141.2
+
 if [[ $TRAVIS_OS_NAME == 'osx' ]]; then
     brew install libpng openexr
-    curl -LGo vulkan-sdk.tar.gz https://sdk.lunarg.com/sdk/download/$VK_VERSION/mac/vulkan-sdk.tar.gz?human=true
-    tar zxf vulkan-sdk.tar.gz
-    export VULKAN_SDK=$TRAVIS_BUILD_DIR/vulkansdk-macos-$VK_VERSION/macOS
+    curl -LGo vulkan-sdk.dmg https://sdk.lunarg.com/sdk/download/$VK_VERSION/mac/vulkan-sdk.dmg?Human=true
+    hdiutil attach vulkan-sdk.dmg
+    export VULKAN_SDK=/Volumes/vulkansdk-macos-$VK_VERSION/macOS
     sudo cp -R $VULKAN_SDK/Frameworks/* /Library/Frameworks/
     cat > environments.sh << EOF
 export VULKAN_SDK=$VULKAN_SDK
