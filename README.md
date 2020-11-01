@@ -3,6 +3,8 @@
 | [![Build Status](https://api.travis-ci.org/Lichtso/VulkanFFT.svg)](https://travis-ci.org/Lichtso/VulkanFFT) | [![Build Status Linux](https://travis-matrix-badges.herokuapp.com/repos/Lichtso/VulkanFFT/branches/master/1)](https://travis-ci.org/Lichtso/VulkanFFT) | [![Build Status macOS](https://travis-matrix-badges.herokuapp.com/repos/Lichtso/VulkanFFT/branches/master/2)](https://travis-ci.org/Lichtso/VulkanFFT) | [![Build Status Windows](https://travis-matrix-badges.herokuapp.com/repos/Lichtso/VulkanFFT/branches/master/3)](https://travis-ci.org/Lichtso/VulkanFFT) |
 
 # Vulkan Fast Fourier Transform
+Note: A more recent and more complete [alternative](https://github.com/DTolm/VkFFT) was released.
+
 This library can calculate a multidimensional [Discrete Fourier Transform](https://en.wikipedia.org/wiki/Discrete_Fourier_transform) on the GPU using the [Vulkan API](https://www.khronos.org/vulkan/).
 However, in most cases you probably want a different library,
 because Vulkan does not change much about the GPU computations,
